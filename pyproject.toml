@@ -1,0 +1,9 @@
+[project]
+name = "bot-nfse-nacional"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "patchright>=1.56.0",
+]
