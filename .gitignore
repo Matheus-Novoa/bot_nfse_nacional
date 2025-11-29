@@ -12,3 +12,4 @@ wheels/
 *.ipynb
 cookies/
 browser_dir/
+config.yml

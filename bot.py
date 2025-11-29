@@ -1,17 +1,38 @@
-from patchright.sync_api import sync_playwright, expect
+from patchright.sync_api import expect, Page
+from datetime import datetime
 from pathlib import Path
+import base64
+import re
+from adpters import BrowserAdapter
+from tenacity import retry, wait_fixed, retry_if_exception_type, stop_after_attempt
+from dados import Dados
 
 
 url = 'https://www.nfse.gov.br/EmissorNacional/Login'
 
-data = '17/11/2025'
-cpf = '001.965.940-73'
+data = '29/11/2025'
+data_obj = datetime.strptime(data, '%d/%m/%Y')
+meses = {
+    '1': "Janeiro",
+    '2': "Fevereiro",
+    '3': "Março",
+    '4': "Abril",
+    '5': "Maio",
+    '6': "Junho",
+    '7': "Julho",
+    '8': "Agosto",
+    '9': "Setembro",
+    '10': "Outubro",
+    '11': "Novembro",
+    '12': "Dezembro"
+    }
+mes = meses[str(data_obj.month)]
+ano = str(data_obj.year)
+
 municipio = 'Porto Alegre/RS'
 cod_trib_nac_completo = '08.01.01 - Ensino regular pré-escolar, fundamental e médio'
-descricao = "descrição"
 nbs_pre = '122011200 - Serviços de pré-escola'
 nbs_fund = '122012000 - Serviços de ensino fundamental'
-valor_nota = '3000,00'
 situacao_trib = 'Operação Tributável com Alíquota Básica'
 aliq_pis = '1,65'
 aliq_cofins = '7,6'
@@ -19,114 +40,285 @@ trib_fed = '9,25'
 trib_est = '0,00'
 trib_mun = '4,00'
 
-browser_dir = Path('browser_dir')
-if not browser_dir.exists:
-    browser_dir.mkdir(parents=True, exist_ok=True)
+# aluno = 'Ana'
+# valor = '2899,06'
 
-play = sync_playwright().start()
-context = play.chromium.launch_persistent_context(
-    user_data_dir='browser_dir',
-    channel='chrome',
-    headless=False,
-    ignore_https_errors=True,
-    args=['--start-maximized']
+# dados = {
+#     'cpf': '83740074000',
+#     'descricao': f"PRESTAÇÃO DE SERVIÇO EDUCAÇÃO INFANTIL/FUNDAMENTAL MÊS {mes}/{ano} - ALUNO {aluno}",
+#     'nbs': nbs_pre,
+#     'valor_nota': valor,
+#     'base_calc': valor
+# }
+df_dados = Dados(
+    arqPlanilha=r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_sul\escola_canadenseZS_nov25\Numeração de Boletos_Zona Sul_2025_NOVEMBRO.xlsx",
+    sede='Zona Sul'
 )
-page = context.new_page()
-page.goto(url, wait_until='networkidle', timeout=60000)
-page.click("//a[@class='img-certificado']")
+df_afazer = df_dados.obter_dados()
 
-btn_nova_nfse = page.locator("//a[@class='btnAcesso' and @data-original-title='Nova NFS-e']")
-if btn_nova_nfse.is_visible(timeout=60000):
-    print('Autenticação bem-sucedida')
-    btn_nova_nfse.click()
+def acao_apos_falha_total(retry_state):
+    """
+    Função a ser chamada quando todas as tentativas de 'prencher_tela_valores' falharem.
+    """
+    print("="*50)
+    print("ERRO CRÍTICO: Não foi possível preencher a tela de valores após múltiplas tentativas.")
+    
+    ultima_excecao = retry_state.outcome.exception()
+    print(f"Última exceção capturada: {ultima_excecao}")
+    print(f"Total de tentativas: {retry_state.attempt_number}")
+    
+    print("Fechando o sistema devido a erro persistente...")
+    try:
+        menu_perfil = page.locator("li.dropdown.perfil")
+        menu_perfil.click()
+        expect(menu_perfil).to_be_visible()
+        page.get_by_role("link", name="Sair").click()
+    finally:
+        browser.close_browser()
 
-tela_pessoas = page.locator("//input[@class='form-control data']")
-if tela_pessoas.is_visible():
-    print('Tela PESSOAS carregada')
-    tela_pessoas.fill(data)
 
-    page.wait_for_load_state('networkidle')
-    page.click("//input[@name='Prestador.Nome']")
+def acessar_portal(page: Page, browser):
+    try:
+        page.goto(url, wait_until='networkidle', timeout=60000)
+        btn_login_certif = page.locator("a.img-certificado")
+        expect(btn_login_certif).to_be_visible()
+    except Exception as e:
+        print(f'Falha ao acessar o portal: {e}')
+        browser.close_browser()
 
-    page.click("//div[@id='pnlTomador']//label[contains(.,'Brasil')]/span")
-    page.wait_for_load_state('networkidle')
 
-    page.fill(selector='#Tomador_Inscricao', value=cpf)
-    page.click("#btn_Tomador_Inscricao_pesquisar")
+def login(page: Page, browser):
+    try:
+        btn_login_certif = page.locator("a.img-certificado")
+        btn_login_certif.click()
+        btn_nova_nfse = page.locator("a.btnAcesso[data-original-title='Nova NFS-e']")
+        expect(btn_nova_nfse).to_be_visible()        
+        print('Autenticação bem-sucedida')
+    except Exception as e:
+        print(f'Falha na autenticação: {e}')
+        print('Tentando regarregar a página...')
+        try:
+            page.reload()
+            expect(btn_login_certif).to_be_visible()
+            print('Página recarregada')
+        except:
+            print('Falha no recarregamento da página')
+            browser.close_browser()
 
-    page.get_by_role("button", name="Avançar").click()
-else:
-    print('Falha na autenticação')
 
-page.locator("#pnlLocalPrestacao").get_by_label("").click()
-campo_busca_municipio = page.get_by_role("searchbox", name="Search")
-campo_busca_municipio.fill(municipio)
-page.wait_for_load_state('networkidle')
-page.get_by_role("option", name=municipio).click()
+def gerar_nova_nf(page: Page, primeira=False):
+    try:
+        if primeira:
+            btn_nova_nfse = page.locator("a.btnAcesso[data-original-title='Nova NFS-e']")
+        else:
+            btn_nova_nfse = page.locator("#btnNovaNFSe")
+        
+        btn_nova_nfse.click()
+    except Exception as e:
+        print(f'Erro na geração da nova nota fiscal: {e}')
 
-cod_trib_nac_prefix = cod_trib_nac_completo.split()[0].replace('.', '')
 
-page.get_by_label("", exact=True).click()
-campo_busca_cod_trib_nac = page.get_by_role("searchbox", name="Search")
-campo_busca_cod_trib_nac.fill(cod_trib_nac_prefix)
-page.get_by_role("option", name=cod_trib_nac_completo).click()
+@retry(
+    retry=retry_if_exception_type(TimeoutError),
+    wait=wait_fixed(3),
+    stop=stop_after_attempt(3),
+    retry_error_callback=acao_apos_falha_total
+)
+def preencher_tela_pessoas(cliente, page: Page):
+    try:
+        campo_data = page.locator("input.form-control.data")
+        expect(campo_data).to_be_editable()
+        print('Tela PESSOAS carregada')
+        
+        campo_data.click()
+        campo_data.fill(data)
+        page.locator("body").click()
 
-page.locator("i").nth(1).click()
-page.locator("#ServicoPrestado_Descricao").fill(descricao)
-page.wait_for_timeout(1000)
+        municipio_prestacao = page.locator(
+            "#Prestador_EnderecoNacional_CodigoMunicipio_chosen .chosen-single span"
+        )
+        expect(municipio_prestacao).not_to_have_text("", timeout=15000)
 
-campo_nbs = page.locator("#ServicoPrestado_CodigoNBS_chosen")
-campo_nbs.click()
-campo_nbs.get_by_text(nbs_pre).click()
+        localizacao_tomador = page.locator("//div[@id='pnlTomador']//label[contains(.,'Brasil')]/span")
+        localizacao_tomador.click()
+        
+        cpf_tomador = page.locator('#Tomador_Inscricao')
+        cpf_tomador.fill(cliente.CPF)
+        
+        btn_pesquisa_cpf = page.locator("#btn_Tomador_Inscricao_pesquisar")
+        btn_pesquisa_cpf.click()
 
-page.get_by_role("button", name="Avançar").click()
+        page.get_by_role("button", name="Avançar").click()
+    except TimeoutError as e:
+        print(f'SystemError: {e}')
+        print('Tentando regarregar a página...')
+        page.reload()
+        raise
 
-page.fill('#Valores_ValorServico', valor_nota)
-page.locator("form").click()
 
-trib_mun = page.locator("//div[@id='pnlOperacaoTributavel']//label[contains(.,'Não')]/span").all()
-elegib_issqn = trib_mun[0]
-retenc_issqn = trib_mun[1]
-beneficio_mun = trib_mun[2]
+@retry(
+    retry=retry_if_exception_type(TimeoutError),
+    wait=wait_fixed(3),
+    stop=stop_after_attempt(3),
+    retry_error_callback=acao_apos_falha_total
+)
+def preencher_tela_servicos(cliente, page: Page):
+    try:
+        campo_municipio = page.locator("#pnlLocalPrestacao").get_by_label("")
+        expect(campo_municipio).to_be_enabled()
+        print('Tela SERVIÇOS carregada')
+        campo_municipio.click()
 
-elegib_issqn.click()
-retenc_issqn.click()
-beneficio_mun.click()
+        pesquisa_municipio = page.get_by_role("searchbox", name="Search")
+        pesquisa_municipio.fill(municipio)
 
-campo_situacao_trib = page.locator('#TributacaoFederal_PISCofins_SituacaoTributaria_chosen')
-campo_situacao_trib.click()
-campo_situacao_trib.get_by_text(situacao_trib).click()
+        page.get_by_role("option", name=municipio).click()
 
-page.click("//label[contains(.,'Não Retido')]/span")
+        cod_trib_nac_prefix = cod_trib_nac_completo.split()[0].replace('.', '')
 
-page.fill('#TributacaoFederal_PISCofins_BaseDeCalculo', valor_nota)
-page.fill('#TributacaoFederal_PISCofins_AliquotaPIS', aliq_pis)
-page.fill('#TributacaoFederal_PISCofins_AliquotaCOFINS', aliq_cofins)
+        page.get_by_label("", exact=True).click()
+        campo_busca_cod_trib_nac = page.get_by_role("searchbox", name="Search")
+        campo_busca_cod_trib_nac.fill(cod_trib_nac_prefix)
+        page.get_by_role("option", name=cod_trib_nac_completo).click()
 
-page.click("//label[contains(.,'Configurar os valores percentuais correspondentes')]/span")
+        page.locator("i").nth(1).click()
+        texto_descricao = f'PRESTAÇÃO DE SERVIÇO EDUCAÇÃO INFANTIL/FUNDAMENTAL MÊS {mes}/{ano} - ALUNO {cliente.Aluno}'
+        page.locator("#ServicoPrestado_Descricao").fill(texto_descricao)
 
-page.fill('#ValorTributos_PercentualTotalFederal', trib_fed)
-page.fill('#ValorTributos_PercentualTotalEstadual', trib_est)
-page.fill('#ValorTributos_PercentualTotalMunicipal', trib_mun)
+        campo_nbs = page.locator("#ServicoPrestado_CodigoNBS_chosen")
+        campo_nbs.click()
 
-page.get_by_role("button", name="Avançar").click()
+        nbs = nbs_pre if cliente.Acumulador == '1' else nbs_fund
 
-cpf_result = page.inner_text("//dt[contains(.,'CPF')]/parent::dl//span")
-nome_result = page.inner_text("(//div[@class='pnlCollapse']//dt[contains(.,'Nome')])[2]/following-sibling::dd")
-data_result = page.inner_text("(//dt[contains(.,'Data de Competência')]/following-sibling::dd)[1]")
-valor_nota_result = page.inner_text("(//dt[contains(.,'Valor do serviço prestado')]/following-sibling::dd)[1]")
-situacao_trib_result = page.inner_text("(//dt[contains(.,'Situação Tributária')]/following-sibling::dd)[1]")
-base_calc_result = page.inner_text("(//dt[contains(.,'BC')]/following-sibling::dd)[1]")
-aliq_pis_result = page.inner_text("(//dt[contains(.,'PIS - Alíquota')]/following-sibling::dd)[1]")
-aliq_cofins_result = page.inner_text("(//dt[contains(.,'COFINS - Alíquota')]/following-sibling::dd)[1]")
-tipo_reten_result = page.inner_text("(//dt[contains(.,'Tipo de Retenção')]/following-sibling::dd)[1]")
+        campo_nbs.locator("input").press_sequentially(nbs.split(' ')[0], delay=50)
+        campo_nbs.locator("input").press("Enter")
 
-print(cpf_result)
-print(nome_result)
-print(data_result)
-print(valor_nota_result)
-print(situacao_trib_result)
-print(base_calc_result)
-print(aliq_pis_result)
-print(aliq_cofins_result)
-print(tipo_reten_result)
+        page.get_by_role("button", name="Avançar").click()
+    except TimeoutError as e:
+        print(f'SystemError: {e}')
+        print('Tentando regarregar a página...')
+        page.reload()
+        raise
+
+
+@retry(
+    retry=retry_if_exception_type(TimeoutError),
+    wait=wait_fixed(3),
+    stop=stop_after_attempt(3),
+    retry_error_callback=acao_apos_falha_total
+)
+def prencher_tela_valores(cliente, page: Page):
+    try:
+        campo_valor_servico = page.locator('#Valores_ValorServico')
+        expect(campo_valor_servico).to_be_editable()
+        print('Tela VALORES carregada')
+
+        campo_valor_servico.fill(cliente.ValorTotal)
+        page.locator("form").click()
+
+        # opcoes_trib_mun = page.locator("//div[@id='pnlOperacaoTributavel']//label[contains(.,'Não')]/span").all()
+        opcoes_trib_mun = page.locator("#pnlOperacaoTributavel label:has-text('Não') span").all()
+        elegib_issqn = opcoes_trib_mun[0]
+        retenc_issqn = opcoes_trib_mun[1]
+        beneficio_mun = opcoes_trib_mun[2]
+
+        elegib_issqn.click()
+        retenc_issqn.click()
+        beneficio_mun.click()
+
+        campo_situacao_trib = page.locator('#TributacaoFederal_PISCofins_SituacaoTributaria_chosen')
+        campo_situacao_trib.click()
+        campo_situacao_trib.get_by_text(situacao_trib).click()
+
+        check_n_retido = page.locator("label:has-text('Não Retido') span")
+        check_n_retido.click()
+
+        base_calc = page.locator('#TributacaoFederal_PISCofins_BaseDeCalculo')
+        base_calc.fill(cliente.ValorTotal)
+
+        campo_aliq_pis = page.locator('#TributacaoFederal_PISCofins_AliquotaPIS')
+        campo_aliq_pis.fill(aliq_pis)
+        
+        campo_aliq_cofins = page.locator('#TributacaoFederal_PISCofins_AliquotaCOFINS')
+        campo_aliq_cofins.fill(aliq_cofins)
+
+        config_valores = page.locator("label:has-text('Configurar os valores percentuais correspondentes') span")
+        config_valores.click()
+
+        percent_fed = page.locator("#ValorTributos_PercentualTotalFederal")
+        percent_fed.fill(trib_fed)
+        
+        percent_est = page.locator("#ValorTributos_PercentualTotalEstadual")
+        percent_est.fill(trib_est)
+        
+        percent_mun = page.locator("#ValorTributos_PercentualTotalMunicipal")
+        percent_mun.fill(trib_mun)
+
+        page.get_by_role("button", name="Avançar").click()
+    except TimeoutError as e:
+        print(f'SystemError: {e}')
+        print('Tentando regarregar a página...')
+        page.reload()
+        raise
+
+
+def baixar_arquivos(page):
+    with page.expect_download() as download_info:
+        emitir_nfse = page.locator("#btnProsseguir")
+        emitir_nfse.click()
+        
+        btn_download = page.locator("#btnDownloadXml")
+        expect(btn_download).to_be_visible(timeout=30000)
+        btn_download.click()
+
+    download = download_info.value
+    original_path = Path(download.path())
+
+    novo_path = original_path.parent / f"nfse_{cliente.CPF.replace('.', '').replace('-', '')}.xml"
+    original_path.rename(novo_path)
+    print(f"Arquivo NFSe salvo em: {novo_path}")
+
+browser = BrowserAdapter()
+page = browser.setup_browser()
+
+acessar_portal(page, browser)
+login(page, browser)
+gerar_nova_nf(page, primeira=True)
+
+for cliente in df_afazer.itertuples():
+    preencher_tela_pessoas(cliente, page)
+    preencher_tela_servicos(cliente, page)
+    prencher_tela_valores(cliente, page)
+    baixar_arquivos(page)
+    gerar_nova_nf(page)
+
+# #btnDownloadDANFSE
+
+# resultado = {
+#     'cpf': page.inner_text("//dt[contains(.,'CPF')]/parent::dl//span"),
+#     'nome': page.inner_text("(//div[@class='pnlCollapse']//dt[contains(.,'Nome')])[2]/following-sibling::dd"),
+#     'descricao': page.inner_text("(//dt[contains(.,'Descrição do Serviço')]/following-sibling::dd)[1]"),
+#     'nbs': page.inner_text("(//dt[contains(.,'Item da NBS')]/following-sibling::dd)[1]"),
+#     'valor_nota': page.inner_text("(//dt[contains(.,'Valor do serviço prestado')]/following-sibling::dd)[1]"),
+#     'base_calc': page.inner_text("(//dt[contains(.,'BC')]/following-sibling::dd)[1]"),
+# }
+# data_result = page.inner_text("(//dt[contains(.,'Data de Competência')]/following-sibling::dd)[1]")
+# situacao_trib_result = page.inner_text("(//dt[contains(.,'Situação Tributária')]/following-sibling::dd)[1]")
+# aliq_pis_result = page.inner_text("(//dt[contains(.,'PIS - Alíquota')]/following-sibling::dd)[1]")
+# aliq_cofins_result = page.inner_text("(//dt[contains(.,'COFINS - Alíquota')]/following-sibling::dd)[1]")
+# tipo_reten_result = page.inner_text("(//dt[contains(.,'Tipo de Retenção')]/following-sibling::dd)[1]")
+
+# for chave, valor_esperado in dados.items():
+#     valor_obtido = resultado.get(chave, 'NÃO ENCONTRADO')
+#     if valor_esperado == valor_obtido:
+#         print(f"[SUCESSO] Campo '{chave}': '{valor_obtido}'")
+#     else:
+#         print(f"[FALHA] Campo '{chave}': Esperado '{valor_esperado}', Obtido '{valor_obtido}'")
+
+# menu_perfil = page.locator("li.dropdown.perfil")
+# menu_perfil.click()
+# expect(menu_perfil).to_be_visible()
+# page.get_by_role("link", name="Sair").click()
+
+# browser.close()
+# play.stop()
