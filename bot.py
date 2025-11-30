@@ -1,8 +1,9 @@
 from patchright.sync_api import expect, Page
+from patchright._impl._errors import TimeoutError as terror
 from datetime import datetime
 from pathlib import Path
-import base64
-import re
+from io import BytesIO
+import pdfplumber
 from adpters import BrowserAdapter
 from tenacity import retry, wait_fixed, retry_if_exception_type, stop_after_attempt
 from dados import Dados
@@ -50,11 +51,12 @@ trib_mun = '4,00'
 #     'valor_nota': valor,
 #     'base_calc': valor
 # }
-df_dados = Dados(
+dados_obj = Dados(
     arqPlanilha=r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_sul\escola_canadenseZS_nov25\Numeração de Boletos_Zona Sul_2025_NOVEMBRO.xlsx",
     sede='Zona Sul'
 )
-df_afazer = df_dados.obter_dados()
+df_afazer = dados_obj.obter_dados().copy()
+df_afazer['Notas'] = df_afazer['Notas'].astype(str)
 
 def acao_apos_falha_total(retry_state):
     """
@@ -119,13 +121,15 @@ def gerar_nova_nf(page: Page, primeira=False):
 
 
 @retry(
-    retry=retry_if_exception_type(TimeoutError),
+    retry=retry_if_exception_type(terror, AssertionError),
     wait=wait_fixed(3),
     stop=stop_after_attempt(3),
     retry_error_callback=acao_apos_falha_total
 )
 def preencher_tela_pessoas(cliente, page: Page):
     try:
+        print(cliente.ResponsávelFinanceiro)
+        print(cliente.CPF)
         campo_data = page.locator("input.form-control.data")
         expect(campo_data).to_be_editable()
         print('Tela PESSOAS carregada')
@@ -134,22 +138,18 @@ def preencher_tela_pessoas(cliente, page: Page):
         campo_data.fill(data)
         page.locator("body").click()
 
-        municipio_prestacao = page.locator(
-            "#Prestador_EnderecoNacional_CodigoMunicipio_chosen .chosen-single span"
-        )
-        expect(municipio_prestacao).not_to_have_text("", timeout=15000)
-
         localizacao_tomador = page.locator("//div[@id='pnlTomador']//label[contains(.,'Brasil')]/span")
+        expect(localizacao_tomador).to_be_enabled()
         localizacao_tomador.click()
         
         cpf_tomador = page.locator('#Tomador_Inscricao')
-        cpf_tomador.fill(cliente.CPF)
+        cpf_tomador.fill(str(cliente.CPF))
         
         btn_pesquisa_cpf = page.locator("#btn_Tomador_Inscricao_pesquisar")
         btn_pesquisa_cpf.click()
 
         page.get_by_role("button", name="Avançar").click()
-    except TimeoutError as e:
+    except terror as e:
         print(f'SystemError: {e}')
         print('Tentando regarregar a página...')
         page.reload()
@@ -157,7 +157,7 @@ def preencher_tela_pessoas(cliente, page: Page):
 
 
 @retry(
-    retry=retry_if_exception_type(TimeoutError),
+    retry=retry_if_exception_type(terror, AssertionError),
     wait=wait_fixed(3),
     stop=stop_after_attempt(3),
     retry_error_callback=acao_apos_falha_total
@@ -194,7 +194,7 @@ def preencher_tela_servicos(cliente, page: Page):
         campo_nbs.locator("input").press("Enter")
 
         page.get_by_role("button", name="Avançar").click()
-    except TimeoutError as e:
+    except terror as e:
         print(f'SystemError: {e}')
         print('Tentando regarregar a página...')
         page.reload()
@@ -202,21 +202,21 @@ def preencher_tela_servicos(cliente, page: Page):
 
 
 @retry(
-    retry=retry_if_exception_type(TimeoutError),
+    retry=retry_if_exception_type(terror, AssertionError),
     wait=wait_fixed(3),
     stop=stop_after_attempt(3),
     retry_error_callback=acao_apos_falha_total
 )
 def prencher_tela_valores(cliente, page: Page):
     try:
+        print(f'Valor: {cliente.ValorTotal}')
         campo_valor_servico = page.locator('#Valores_ValorServico')
         expect(campo_valor_servico).to_be_editable()
         print('Tela VALORES carregada')
 
-        campo_valor_servico.fill(cliente.ValorTotal)
-        page.locator("form").click()
+        campo_valor_servico.fill(str(cliente.ValorTotal))
+        page.locator("body").click()
 
-        # opcoes_trib_mun = page.locator("//div[@id='pnlOperacaoTributavel']//label[contains(.,'Não')]/span").all()
         opcoes_trib_mun = page.locator("#pnlOperacaoTributavel label:has-text('Não') span").all()
         elegib_issqn = opcoes_trib_mun[0]
         retenc_issqn = opcoes_trib_mun[1]
@@ -234,7 +234,7 @@ def prencher_tela_valores(cliente, page: Page):
         check_n_retido.click()
 
         base_calc = page.locator('#TributacaoFederal_PISCofins_BaseDeCalculo')
-        base_calc.fill(cliente.ValorTotal)
+        base_calc.fill(str(cliente.ValorTotal))
 
         campo_aliq_pis = page.locator('#TributacaoFederal_PISCofins_AliquotaPIS')
         campo_aliq_pis.fill(aliq_pis)
@@ -255,28 +255,74 @@ def prencher_tela_valores(cliente, page: Page):
         percent_mun.fill(trib_mun)
 
         page.get_by_role("button", name="Avançar").click()
-    except TimeoutError as e:
+    except terror as e:
         print(f'SystemError: {e}')
         print('Tentando regarregar a página...')
         page.reload()
         raise
 
 
-def baixar_arquivos(page):
+@retry(
+    retry=retry_if_exception_type(terror, AssertionError),
+    wait=wait_fixed(3),
+    stop=stop_after_attempt(3),
+    retry_error_callback=acao_apos_falha_total
+)
+def emitir_nota(page: Page):
+    emitir_nfse = page.locator("#btnProsseguir")
+    emitir_nfse.click()
+
+
+@retry(
+    retry=retry_if_exception_type(terror, AssertionError),
+    wait=wait_fixed(3),
+    stop=stop_after_attempt(3),
+    retry_error_callback=acao_apos_falha_total
+)
+def baixar_arquivos(formato, page: Page):
+    formatos = {
+        'xml': page.locator("#btnDownloadXml"),
+        'pdf': page.locator("#btnDownloadDANFSE")
+    }
+    
+    btn_download = formatos.get(formato)
+    expect(btn_download).to_be_enabled(timeout=30000)
+
     with page.expect_download() as download_info:
-        emitir_nfse = page.locator("#btnProsseguir")
-        emitir_nfse.click()
-        
-        btn_download = page.locator("#btnDownloadXml")
-        expect(btn_download).to_be_visible(timeout=30000)
         btn_download.click()
 
-    download = download_info.value
-    original_path = Path(download.path())
+    return download_info
 
-    novo_path = original_path.parent / f"nfse_{cliente.CPF.replace('.', '').replace('-', '')}.xml"
+
+def salvar_xml(download_info, cliente):
+    download_xml = download_info.value
+    original_path = Path(download_xml.path())
+
+    novo_path = original_path.parent / f"nfse_{str(cliente.CPF).replace('.', '').replace('-', '')}_{cliente.Index}.xml"
     original_path.rename(novo_path)
-    print(f"Arquivo NFSe salvo em: {novo_path}")
+    print(f"Arquivo NFSe (XML) salvo em: {novo_path}")
+
+
+def processar_pdf(download_info):
+    download_pdf = download_info.value
+    try:
+        pdf_bytes = Path(download_pdf.path()).read_bytes()
+        pdf_file = BytesIO(pdf_bytes)
+        
+        with pdfplumber.open(pdf_file) as pdf:
+            textoBruto = ''
+            for page in pdf.pages:
+                textoBruto += page.extract_text()
+        
+        linha_num_nfs = 6
+        pos_num_nfs = 0
+        num_nfs = textoBruto.splitlines()[linha_num_nfs].split()[pos_num_nfs]
+        print(f"Número da NFS-e extraído do PDF: {num_nfs}")
+    finally:
+        download_pdf.delete()
+        print("Arquivo PDF temporário processado e deletado.")
+        return num_nfs
+
 
 browser = BrowserAdapter()
 page = browser.setup_browser()
@@ -289,10 +335,20 @@ for cliente in df_afazer.itertuples():
     preencher_tela_pessoas(cliente, page)
     preencher_tela_servicos(cliente, page)
     prencher_tela_valores(cliente, page)
-    baixar_arquivos(page)
-    gerar_nova_nf(page)
+    emitir_nota(page)
+    
+    download_info_xml = baixar_arquivos('xml', page)
+    if download_info_xml:
+        salvar_xml(download_info_xml, cliente)
 
-# #btnDownloadDANFSE
+    download_info_pdf = baixar_arquivos('pdf', page)
+    if download_info_pdf:
+        num_nfs = processar_pdf(download_info_pdf)
+
+        df_afazer.at[cliente.Index, 'Notas'] = num_nfs
+        dados_obj.registra_numero_notas(cliente.Index, num_nfs)
+
+    gerar_nova_nf(page)
 
 # resultado = {
 #     'cpf': page.inner_text("//dt[contains(.,'CPF')]/parent::dl//span"),
