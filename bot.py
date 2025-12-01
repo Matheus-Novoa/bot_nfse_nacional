@@ -49,6 +49,7 @@ dados_obj = Dados(
 df_afazer = dados_obj.obter_dados().copy()
 df_afazer['Notas'] = df_afazer['Notas'].astype(str)
 
+
 def acao_apos_falha_total(retry_state):
     """
     Função a ser chamada quando todas as tentativas de 'prencher_tela_valores' falharem.
@@ -65,6 +66,14 @@ def acao_apos_falha_total(retry_state):
         logout(page)
     finally:
         browser.close_browser()
+
+
+retry_on_error = retry(
+    retry=retry_if_exception_type((terror, AssertionError)),
+    wait=wait_fixed(3),
+    stop=stop_after_attempt(3),
+    retry_error_callback=acao_apos_falha_total
+)
 
 
 def acessar_portal(page: Page, browser):
@@ -115,12 +124,7 @@ def gerar_nova_nf(page: Page, primeira=False):
         print(f'Erro na geração da nova nota fiscal: {e}')
 
 
-@retry(
-    retry=retry_if_exception_type([terror, AssertionError]),
-    wait=wait_fixed(3),
-    stop=stop_after_attempt(3),
-    retry_error_callback=acao_apos_falha_total
-)
+@retry_on_error
 def preencher_tela_pessoas(cliente, page: Page):
     try:
         print(cliente.ResponsávelFinanceiro)
@@ -151,12 +155,7 @@ def preencher_tela_pessoas(cliente, page: Page):
         raise
 
 
-@retry(
-    retry=retry_if_exception_type([terror, AssertionError]),
-    wait=wait_fixed(3),
-    stop=stop_after_attempt(3),
-    retry_error_callback=acao_apos_falha_total
-)
+@retry_on_error
 def preencher_tela_servicos(cliente, page: Page):
     try:
         campo_municipio = page.locator("#pnlLocalPrestacao").get_by_label("")
@@ -196,12 +195,7 @@ def preencher_tela_servicos(cliente, page: Page):
         raise
 
 
-@retry(
-    retry=retry_if_exception_type([terror, AssertionError]),
-    wait=wait_fixed(3),
-    stop=stop_after_attempt(3),
-    retry_error_callback=acao_apos_falha_total
-)
+@retry_on_error
 def prencher_tela_valores(cliente, page: Page):
     try:
         print(f'Valor: {cliente.ValorTotal}')
@@ -257,23 +251,13 @@ def prencher_tela_valores(cliente, page: Page):
         raise
 
 
-@retry(
-    retry=retry_if_exception_type([terror, AssertionError]),
-    wait=wait_fixed(3),
-    stop=stop_after_attempt(3),
-    retry_error_callback=acao_apos_falha_total
-)
+@retry_on_error
 def emitir_nota(page: Page):
     emitir_nfse = page.locator("#btnProsseguir")
     emitir_nfse.click()
 
 
-@retry(
-    retry=retry_if_exception_type([terror, AssertionError]),
-    wait=wait_fixed(3),
-    stop=stop_after_attempt(3),
-    retry_error_callback=acao_apos_falha_total
-)
+@retry_on_error
 def baixar_arquivos(formato, page: Page):
     formatos = {
         'xml': page.locator("#btnDownloadXml"),
@@ -347,32 +331,3 @@ for cliente in df_afazer.itertuples():
 
 logout(page)
 browser.close_browser()
-
-# resultado = {
-#     'cpf': page.inner_text("//dt[contains(.,'CPF')]/parent::dl//span"),
-#     'nome': page.inner_text("(//div[@class='pnlCollapse']//dt[contains(.,'Nome')])[2]/following-sibling::dd"),
-#     'descricao': page.inner_text("(//dt[contains(.,'Descrição do Serviço')]/following-sibling::dd)[1]"),
-#     'nbs': page.inner_text("(//dt[contains(.,'Item da NBS')]/following-sibling::dd)[1]"),
-#     'valor_nota': page.inner_text("(//dt[contains(.,'Valor do serviço prestado')]/following-sibling::dd)[1]"),
-#     'base_calc': page.inner_text("(//dt[contains(.,'BC')]/following-sibling::dd)[1]"),
-# }
-# data_result = page.inner_text("(//dt[contains(.,'Data de Competência')]/following-sibling::dd)[1]")
-# situacao_trib_result = page.inner_text("(//dt[contains(.,'Situação Tributária')]/following-sibling::dd)[1]")
-# aliq_pis_result = page.inner_text("(//dt[contains(.,'PIS - Alíquota')]/following-sibling::dd)[1]")
-# aliq_cofins_result = page.inner_text("(//dt[contains(.,'COFINS - Alíquota')]/following-sibling::dd)[1]")
-# tipo_reten_result = page.inner_text("(//dt[contains(.,'Tipo de Retenção')]/following-sibling::dd)[1]")
-
-# for chave, valor_esperado in dados.items():
-#     valor_obtido = resultado.get(chave, 'NÃO ENCONTRADO')
-#     if valor_esperado == valor_obtido:
-#         print(f"[SUCESSO] Campo '{chave}': '{valor_obtido}'")
-#     else:
-#         print(f"[FALHA] Campo '{chave}': Esperado '{valor_esperado}', Obtido '{valor_obtido}'")
-
-# menu_perfil = page.locator("li.dropdown.perfil")
-# menu_perfil.click()
-# expect(menu_perfil).to_be_visible()
-# page.get_by_role("link", name="Sair").click()
-
-# browser.close()
-# play.stop()
