@@ -40,19 +40,10 @@ aliq_cofins = '7,6'
 trib_fed = '9,25'
 trib_est = '0,00'
 trib_mun = '4,00'
+planilha_dados = r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_sul\escola_canadenseZS_nov25\Numeração de Boletos_Zona Sul_2025_NOVEMBRO.xlsx" 
 
-# aluno = 'Ana'
-# valor = '2899,06'
-
-# dados = {
-#     'cpf': '83740074000',
-#     'descricao': f"PRESTAÇÃO DE SERVIÇO EDUCAÇÃO INFANTIL/FUNDAMENTAL MÊS {mes}/{ano} - ALUNO {aluno}",
-#     'nbs': nbs_pre,
-#     'valor_nota': valor,
-#     'base_calc': valor
-# }
 dados_obj = Dados(
-    arqPlanilha=r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_sul\escola_canadenseZS_nov25\Numeração de Boletos_Zona Sul_2025_NOVEMBRO.xlsx",
+    arqPlanilha=planilha_dados,
     sede='Zona Sul'
 )
 df_afazer = dados_obj.obter_dados().copy()
@@ -71,10 +62,7 @@ def acao_apos_falha_total(retry_state):
     
     print("Fechando o sistema devido a erro persistente...")
     try:
-        menu_perfil = page.locator("li.dropdown.perfil")
-        menu_perfil.click()
-        expect(menu_perfil).to_be_visible()
-        page.get_by_role("link", name="Sair").click()
+        logout(page)
     finally:
         browser.close_browser()
 
@@ -108,6 +96,13 @@ def login(page: Page, browser):
             browser.close_browser()
 
 
+def logout(page: Page):
+    menu_perfil = page.locator("li.dropdown.perfil")
+    menu_perfil.click()
+    expect(menu_perfil).to_be_visible()
+    page.get_by_role("link", name="Sair").click()
+
+
 def gerar_nova_nf(page: Page, primeira=False):
     try:
         if primeira:
@@ -121,7 +116,7 @@ def gerar_nova_nf(page: Page, primeira=False):
 
 
 @retry(
-    retry=retry_if_exception_type(terror, AssertionError),
+    retry=retry_if_exception_type([terror, AssertionError]),
     wait=wait_fixed(3),
     stop=stop_after_attempt(3),
     retry_error_callback=acao_apos_falha_total
@@ -157,7 +152,7 @@ def preencher_tela_pessoas(cliente, page: Page):
 
 
 @retry(
-    retry=retry_if_exception_type(terror, AssertionError),
+    retry=retry_if_exception_type([terror, AssertionError]),
     wait=wait_fixed(3),
     stop=stop_after_attempt(3),
     retry_error_callback=acao_apos_falha_total
@@ -202,7 +197,7 @@ def preencher_tela_servicos(cliente, page: Page):
 
 
 @retry(
-    retry=retry_if_exception_type(terror, AssertionError),
+    retry=retry_if_exception_type([terror, AssertionError]),
     wait=wait_fixed(3),
     stop=stop_after_attempt(3),
     retry_error_callback=acao_apos_falha_total
@@ -263,7 +258,7 @@ def prencher_tela_valores(cliente, page: Page):
 
 
 @retry(
-    retry=retry_if_exception_type(terror, AssertionError),
+    retry=retry_if_exception_type([terror, AssertionError]),
     wait=wait_fixed(3),
     stop=stop_after_attempt(3),
     retry_error_callback=acao_apos_falha_total
@@ -274,7 +269,7 @@ def emitir_nota(page: Page):
 
 
 @retry(
-    retry=retry_if_exception_type(terror, AssertionError),
+    retry=retry_if_exception_type([terror, AssertionError]),
     wait=wait_fixed(3),
     stop=stop_after_attempt(3),
     retry_error_callback=acao_apos_falha_total
@@ -349,6 +344,9 @@ for cliente in df_afazer.itertuples():
         dados_obj.registra_numero_notas(cliente.Index, num_nfs)
 
     gerar_nova_nf(page)
+
+logout(page)
+browser.close_browser()
 
 # resultado = {
 #     'cpf': page.inner_text("//dt[contains(.,'CPF')]/parent::dl//span"),
