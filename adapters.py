@@ -4,11 +4,11 @@ from pathlib import Path
 
 class BrowserAdapter:
 
-    def __init__(self):
+    def __init__(self, download_dir):
         self.play = None
         self.browser = None
         self.page = None
-        self._download_dir = Path(r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\xml_notas")
+        self.download_dir = Path(download_dir)
         self._browser_dir = Path('browser_dir')
         self._channel = 'chrome'
 
@@ -24,7 +24,7 @@ class BrowserAdapter:
         
         self.browser = self.play.chromium.launch_persistent_context(
             user_data_dir=self._browser_dir.name,
-            downloads_path=self._download_dir,
+            downloads_path=self.download_dir,
             channel=self._channel,
             headless=False,
             ignore_https_errors=True,

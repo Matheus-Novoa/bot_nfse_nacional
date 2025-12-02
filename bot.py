@@ -26,6 +26,7 @@ mes = meses[str(data_obj.month)]
 ano = str(data_obj.year)
 
 planilha_dados = r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_sul\escola_canadenseZS_nov25\Numeração de Boletos_Zona Sul_2025_NOVEMBRO.xlsx" 
+browser = BrowserAdapter(planilha_dados)
 
 dados_obj = Dados(
     arqPlanilha=planilha_dados,
@@ -34,7 +35,6 @@ dados_obj = Dados(
 df_afazer = dados_obj.obter_dados().copy()
 df_afazer['Notas'] = df_afazer['Notas'].astype(str)
 
-browser = BrowserAdapter()
 page = browser.setup_browser()
 webform = Webform(page, browser)
 
