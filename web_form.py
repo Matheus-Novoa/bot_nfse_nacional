@@ -6,6 +6,7 @@ import pdfplumber
 from io import BytesIO
 from functools import wraps
 from tenacity import retry, wait_fixed, retry_if_exception_type, stop_after_attempt
+from config import obter_dados_config
 
 
 def retentativa(func):
@@ -26,6 +27,7 @@ class Webform:
     def __init__(self, page: Page, browser: BrowserAdapter):
         self.page = page
         self.browser = browser
+        self.config = obter_dados_config()
         self.cliente = None
 
 
@@ -47,7 +49,8 @@ class Webform:
             self.browser.close_browser()
 
     
-    def acessar_portal(self, url):
+    def acessar_portal(self):
+        url = self.config['url']
         try:
             self.page.goto(url, wait_until='networkidle', timeout=60000)
             btn_login_certif = self.page.locator("a.img-certificado")
@@ -96,7 +99,9 @@ class Webform:
 
     
     @retentativa
-    def preencher_tela_pessoas(self, data):
+    def preencher_tela_pessoas(self):
+        data = self.config['data']
+        
         try:
             print(self.cliente.ResponsávelFinanceiro)
             print(self.cliente.CPF)
@@ -127,7 +132,12 @@ class Webform:
 
     
     @retentativa
-    def preencher_tela_servicos(self, municipio, cod_trib_nac_completo, mes, ano, nbs_pre, nbs_fund):
+    def preencher_tela_servicos(self, mes, ano):
+        municipio = self.config['municipio']
+        cod_trib_nac_completo = self.config['cod_trib_nac_completo']
+        nbs_pre = self.config['nbs_pre']
+        nbs_fund = self.config['nbs_fund']
+        
         try:
             campo_municipio = self.page.locator("#pnlLocalPrestacao").get_by_label("")
             expect(campo_municipio).to_be_enabled()
@@ -167,7 +177,14 @@ class Webform:
 
     
     @retentativa
-    def prencher_tela_valores(self, situacao_trib, aliq_pis, aliq_cofins, trib_fed, trib_est, trib_mun):
+    def prencher_tela_valores(self):
+        situacao_trib = self.config['situacao_trib']
+        aliq_pis = self.config['aliq_pis']
+        aliq_cofins = self.config['aliq_cofins']
+        trib_fed = self.config['trib_fed']
+        trib_est = self.config['trib_est']
+        trib_mun = self.config['trib_mun']
+        
         try:
             print(f'Valor: {self.cliente.ValorTotal}')
             campo_valor_servico = self.page.locator('#Valores_ValorServico')

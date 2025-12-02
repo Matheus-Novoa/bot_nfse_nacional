@@ -2,12 +2,12 @@ from datetime import datetime
 from adapters import BrowserAdapter
 from dados import Dados
 from web_form import Webform
+from config import obter_dados_config
 
 
-url = 'https://www.nfse.gov.br/EmissorNacional/Login'
+config = obter_dados_config()
 
-data = '29/11/2025'
-data_obj = datetime.strptime(data, '%d/%m/%Y')
+data_obj = datetime.strptime(config['data'], '%d/%m/%Y')
 meses = {
     '1': "Janeiro",
     '2': "Fevereiro",
@@ -25,16 +25,6 @@ meses = {
 mes = meses[str(data_obj.month)]
 ano = str(data_obj.year)
 
-municipio = 'Porto Alegre/RS'
-cod_trib_nac_completo = '08.01.01 - Ensino regular pré-escolar, fundamental e médio'
-nbs_pre = '122011200 - Serviços de pré-escola'
-nbs_fund = '122012000 - Serviços de ensino fundamental'
-situacao_trib = 'Operação Tributável com Alíquota Básica'
-aliq_pis = '1,65'
-aliq_cofins = '7,6'
-trib_fed = '9,25'
-trib_est = '0,00'
-trib_mun = '4,00'
 planilha_dados = r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_sul\escola_canadenseZS_nov25\Numeração de Boletos_Zona Sul_2025_NOVEMBRO.xlsx" 
 
 dados_obj = Dados(
@@ -48,30 +38,16 @@ browser = BrowserAdapter()
 page = browser.setup_browser()
 webform = Webform(page, browser)
 
-webform.acessar_portal(url)
+webform.acessar_portal()
 webform.login()
 webform.gerar_nova_nf(primeira=True)
 
 for cliente in df_afazer.itertuples():
     webform.cliente = cliente
 
-    webform.preencher_tela_pessoas(data)
-    webform.preencher_tela_servicos(
-        municipio,
-        cod_trib_nac_completo,
-        mes,
-        ano,
-        nbs_pre,
-        nbs_fund
-    )
-    webform.prencher_tela_valores(
-        situacao_trib,
-        aliq_pis,
-        aliq_cofins,
-        trib_fed,
-        trib_est,
-        trib_mun
-    )
+    webform.preencher_tela_pessoas()
+    webform.preencher_tela_servicos(mes, ano)
+    webform.prencher_tela_valores()
     webform.emitir_nota()
     
     download_info_xml = webform.baixar_arquivos('xml')
