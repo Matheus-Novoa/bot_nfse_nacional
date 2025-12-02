@@ -1,67 +1,64 @@
 from datetime import datetime
-from adapters import BrowserAdapter
+from browser import BrowserAdapter
 from dados import Dados
 from web_form import Webform
-from config import obter_dados_config
 
 
-config = obter_dados_config()
+def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
+    sede = [texto for texto, var in sedes.items() if var.get()][0]
+    # sede = [texto for texto, var in sedes.items() if var][0] # apenas para teste
 
-data_obj = datetime.strptime(config['data'], '%d/%m/%Y')
-meses = {
-    '1': "Janeiro",
-    '2': "Fevereiro",
-    '3': "Março",
-    '4': "Abril",
-    '5': "Maio",
-    '6': "Junho",
-    '7': "Julho",
-    '8': "Agosto",
-    '9': "Setembro",
-    '10': "Outubro",
-    '11': "Novembro",
-    '12': "Dezembro"
-    }
-mes = meses[str(data_obj.month)]
-ano = str(data_obj.year)
+    data_obj = datetime.strptime(dataGeracao, '%d/%m/%Y')
+    meses = {
+        '1': "Janeiro",
+        '2': "Fevereiro",
+        '3': "Março",
+        '4': "Abril",
+        '5': "Maio",
+        '6': "Junho",
+        '7': "Julho",
+        '8': "Agosto",
+        '9': "Setembro",
+        '10': "Outubro",
+        '11': "Novembro",
+        '12': "Dezembro"
+        }
+    mes = meses[str(data_obj.month)]
+    ano = str(data_obj.year)
 
-planilha_dados = r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_sul\escola_canadenseZS_nov25\Numeração de Boletos_Zona Sul_2025_NOVEMBRO.xlsx" 
-browser = BrowserAdapter(planilha_dados)
+    dados_obj = Dados(arqPlanilha, sede)
 
-dados_obj = Dados(
-    arqPlanilha=planilha_dados,
-    sede='Zona Sul'
-)
-df_afazer = dados_obj.obter_dados().copy()
-df_afazer['Notas'] = df_afazer['Notas'].astype(str)
+    df_afazer = dados_obj.obter_dados().copy()
+    df_afazer['Notas'] = df_afazer['Notas'].astype(str)
 
-page = browser.setup_browser()
-webform = Webform(page, browser)
+    browser = BrowserAdapter(pastaDownload)
+    page = browser.setup_browser()
+    webform = Webform(page, browser)
 
-webform.acessar_portal()
-webform.login()
-webform.gerar_nova_nf(primeira=True)
+    webform.acessar_portal()
+    webform.login()
+    webform.gerar_nova_nf(primeira=True)
 
-for cliente in df_afazer.itertuples():
-    webform.cliente = cliente
+    for cliente in df_afazer.itertuples():
+        webform.cliente = cliente
 
-    webform.preencher_tela_pessoas()
-    webform.preencher_tela_servicos(mes, ano)
-    webform.prencher_tela_valores()
-    webform.emitir_nota()
-    
-    download_info_xml = webform.baixar_arquivos('xml')
-    if download_info_xml:
-        webform.salvar_xml(download_info_xml)
+        webform.preencher_tela_pessoas()
+        webform.preencher_tela_servicos(mes, ano)
+        webform.prencher_tela_valores()
+        webform.emitir_nota()
+        
+        download_info_xml = webform.baixar_arquivos('xml')
+        if download_info_xml:
+            webform.salvar_xml(download_info_xml)
 
-    download_info_pdf = webform.baixar_arquivos('pdf')
-    if download_info_pdf:
-        num_nfs = webform.processar_pdf(download_info_pdf)
+        download_info_pdf = webform.baixar_arquivos('pdf')
+        if download_info_pdf:
+            num_nfs = webform.processar_pdf(download_info_pdf)
 
-        df_afazer.at[cliente.Index, 'Notas'] = num_nfs
-        dados_obj.registra_numero_notas(cliente.Index, num_nfs)
+            df_afazer.at[cliente.Index, 'Notas'] = num_nfs
+            dados_obj.registra_numero_notas(cliente.Index, num_nfs)
 
-    webform.gerar_nova_nf()
+        webform.gerar_nova_nf()
 
-webform.logout()
-browser.close_browser()
+    webform.logout()
+    browser.close_browser()

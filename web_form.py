@@ -1,6 +1,6 @@
 from patchright.sync_api import expect, Page
 from patchright._impl._errors import TimeoutError as terror
-from adapters import BrowserAdapter
+from browser import BrowserAdapter
 from pathlib import Path
 import pdfplumber
 from io import BytesIO

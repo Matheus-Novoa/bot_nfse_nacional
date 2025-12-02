@@ -13,3 +13,4 @@ wheels/
 cookies/
 browser_dir/
 config.yml
+.cache
