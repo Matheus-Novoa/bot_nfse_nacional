@@ -1,6 +1,6 @@
 from patchright.sync_api import expect, Page
 from patchright._impl._errors import TimeoutError as terror
-from browser import BrowserAdapter
+from browser import Browser
 from pathlib import Path
 import pdfplumber
 from io import BytesIO
@@ -24,7 +24,7 @@ def retentativa(func):
 
 
 class Webform:
-    def __init__(self, page: Page, browser: BrowserAdapter):
+    def __init__(self, page: Page, browser: Browser):
         self.page = page
         self.browser = browser
         self.config = obter_dados_config()

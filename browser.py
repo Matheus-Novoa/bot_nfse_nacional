@@ -2,7 +2,7 @@ from patchright.sync_api import sync_playwright
 from pathlib import Path
 
 
-class BrowserAdapter:
+class Browser:
 
     def __init__(self, download_dir):
         self.play = None

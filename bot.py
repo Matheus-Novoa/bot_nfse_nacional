@@ -1,5 +1,5 @@
 from datetime import datetime
-from browser import BrowserAdapter
+from browser import Browser
 from dados import Dados
 from web_form import Webform
 
@@ -31,7 +31,7 @@ def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
     df_afazer = dados_obj.obter_dados().copy()
     df_afazer['Notas'] = df_afazer['Notas'].astype(str)
 
-    browser = BrowserAdapter(pastaDownload)
+    browser = Browser(pastaDownload)
     page = browser.setup_browser()
     webform = Webform(page, browser)
 
