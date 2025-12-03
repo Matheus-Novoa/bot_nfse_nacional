@@ -14,11 +14,11 @@ class Browser:
 
 
     def setup_browser(self):
-        if not self._browser_dir.exists:
+        if not self._browser_dir.exists():
             self._browser_dir.mkdir(parents=True, exist_ok=True)
         
-        if not self._download_dir.exists():
-            self._download_dir.mkdir(parents=True, exist_ok=True)
+        if not self.download_dir.exists():
+            self.download_dir.mkdir(parents=True, exist_ok=True)
 
         self.play = sync_playwright().start()
         

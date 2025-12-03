@@ -7,6 +7,10 @@ from io import BytesIO
 from functools import wraps
 from tenacity import retry, wait_fixed, retry_if_exception_type, stop_after_attempt
 from config import obter_dados_config
+from logging_config import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def retentativa(func):
@@ -35,14 +39,14 @@ class Webform:
         """
         Função a ser chamada quando todas as tentativas falharem.
         """
-        print("="*50)
-        print("ERRO CRÍTICO: Não foi possível preencher a tela de valores após múltiplas tentativas.")
+        logger.critical("="*50)
+        logger.critical("ERRO CRÍTICO: Não foi possível preencher a tela de valores após múltiplas tentativas.")
         
         ultima_excecao = retry_state.outcome.exception()
-        print(f"Última exceção capturada: {ultima_excecao}")
-        print(f"Total de tentativas: {retry_state.attempt_number}")
+        logger.critical(f"Última exceção capturada: {ultima_excecao}")
+        logger.critical(f"Total de tentativas: {retry_state.attempt_number}")
         
-        print("Fechando o sistema devido a erro persistente...")
+        logger.critical("Fechando o sistema devido a erro persistente...")
         try:
             self.logout()
         finally:
@@ -56,7 +60,7 @@ class Webform:
             btn_login_certif = self.page.locator("a.img-certificado")
             expect(btn_login_certif).to_be_visible()
         except Exception as e:
-            print(f'Falha ao acessar o portal: {e}')
+            logger.critical(f'Falha ao acessar o portal: {e}')
             self.browser.close_browser()
 
  
@@ -66,16 +70,16 @@ class Webform:
             btn_login_certif.click()
             btn_nova_nfse = self.page.locator("a.btnAcesso[data-original-title='Nova NFS-e']")
             expect(btn_nova_nfse).to_be_visible()        
-            print('Autenticação bem-sucedida')
+            logger.info('Autenticação bem-sucedida')
         except Exception as e:
-            print(f'Falha na autenticação: {e}')
-            print('Tentando regarregar a página...')
+            logger.error(f'Falha na autenticação: {e}')
+            logger.error('Tentando regarregar a página...')
             try:
                 self.page.reload()
                 expect(btn_login_certif).to_be_visible()
-                print('Página recarregada')
+                logger.info('Página recarregada')
             except:
-                print('Falha no recarregamento da página')
+                logger.critical('Falha no recarregamento da página')
                 self.browser.close_browser()
 
 
@@ -95,7 +99,7 @@ class Webform:
                 btn_nova_nfse = self.page.locator("#btnNovaNFSe")
             btn_nova_nfse.click()
         except Exception as e:
-            print(f'Erro na geração da nova nota fiscal: {e}')
+            logger.error(f'Erro na geração da nova nota fiscal: {e}')
 
     
     @retentativa
@@ -103,11 +107,11 @@ class Webform:
         data = self.config['data']
         
         try:
-            print(self.cliente.ResponsávelFinanceiro)
-            print(self.cliente.CPF)
+            logger.info(self.cliente.ResponsávelFinanceiro)
+            logger.info(self.cliente.CPF)
             campo_data = self.page.locator("input.form-control.data")
             expect(campo_data).to_be_editable()
-            print('Tela PESSOAS carregada')
+            logger.info('Tela PESSOAS carregada')
             
             campo_data.click()
             campo_data.fill(data)
@@ -125,8 +129,8 @@ class Webform:
 
             self.page.get_by_role("button", name="Avançar").click()
         except terror as e:
-            print(f'SystemError: {e}')
-            print('Tentando regarregar a página...')
+            logger.error(f'SystemError: {e}')
+            logger.error('Tentando regarregar a página...')
             self.page.reload()
             raise
 
@@ -141,7 +145,7 @@ class Webform:
         try:
             campo_municipio = self.page.locator("#pnlLocalPrestacao").get_by_label("")
             expect(campo_municipio).to_be_enabled()
-            print('Tela SERVIÇOS carregada')
+            logger.info('Tela SERVIÇOS carregada')
             campo_municipio.click()
 
             pesquisa_municipio = self.page.get_by_role("searchbox", name="Search")
@@ -170,8 +174,8 @@ class Webform:
 
             self.page.get_by_role("button", name="Avançar").click()
         except terror as e:
-            print(f'SystemError: {e}')
-            print('Tentando regarregar a página...')
+            logger.error(f'SystemError: {e}')
+            logger.error('Tentando regarregar a página...')
             self.page.reload()
             raise
 
@@ -186,10 +190,10 @@ class Webform:
         trib_mun = self.config['trib_mun']
         
         try:
-            print(f'Valor: {self.cliente.ValorTotal}')
+            logger.info(f'Valor: {self.cliente.ValorTotal}')
             campo_valor_servico = self.page.locator('#Valores_ValorServico')
             expect(campo_valor_servico).to_be_editable()
-            print('Tela VALORES carregada')
+            logger.info('Tela VALORES carregada')
 
             campo_valor_servico.fill(str(self.cliente.ValorTotal))
             self.page.locator("body").click()
@@ -233,8 +237,8 @@ class Webform:
 
             self.page.get_by_role("button", name="Avançar").click()
         except terror as e:
-            print(f'SystemError: {e}')
-            print('Tentando regarregar a página...')
+            logger.error(f'SystemError: {e}')
+            logger.error('Tentando regarregar a página...')
             self.page.reload()
             raise
 
@@ -267,7 +271,7 @@ class Webform:
 
         novo_path = original_path.parent / f"nfse_{str(self.cliente.CPF).replace('.', '').replace('-', '')}_{self.cliente.Index}.xml"
         original_path.rename(novo_path)
-        print(f"Arquivo NFSe (XML) salvo em: {novo_path}")
+        logger.info(f"Arquivo NFSe (XML) salvo em: {novo_path}")
 
   
     def processar_pdf(self, download_info):
@@ -284,8 +288,8 @@ class Webform:
             linha_num_nfs = 6
             pos_num_nfs = 0
             num_nfs = textoBruto.splitlines()[linha_num_nfs].split()[pos_num_nfs]
-            print(f"Número da NFS-e extraído do PDF: {num_nfs}")
+            logger.info(f"Número da NFS-e extraído do PDF: {num_nfs}")
         finally:
             download_pdf.delete()
-            print("Arquivo PDF temporário processado e deletado.")
+            logger.info("Arquivo PDF temporário processado e deletado.")
             return num_nfs
