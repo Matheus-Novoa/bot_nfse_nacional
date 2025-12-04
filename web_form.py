@@ -103,9 +103,7 @@ class Webform:
 
     
     @retentativa
-    def preencher_tela_pessoas(self):
-        data = self.config['data']
-        
+    def preencher_tela_pessoas(self, data):
         try:
             logger.info(self.cliente.ResponsávelFinanceiro)
             logger.info(self.cliente.CPF)

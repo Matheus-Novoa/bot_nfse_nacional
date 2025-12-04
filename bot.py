@@ -42,7 +42,7 @@ def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
     for cliente in df_afazer.itertuples():
         webform.cliente = cliente
 
-        webform.preencher_tela_pessoas()
+        webform.preencher_tela_pessoas(dataGeracao)
         webform.preencher_tela_servicos(mes, ano)
         webform.prencher_tela_valores()
         webform.emitir_nota()

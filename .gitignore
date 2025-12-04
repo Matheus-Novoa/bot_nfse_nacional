@@ -15,3 +15,4 @@ browser_dir/
 config.yml
 .cache
 *.log
+*.json
