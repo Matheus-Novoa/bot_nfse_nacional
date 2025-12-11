@@ -2,6 +2,10 @@ from datetime import datetime
 from browser import Browser
 from dados import Dados
 from web_form import Webform
+from logging_config import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
@@ -45,6 +49,7 @@ def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
         webform.preencher_tela_pessoas(dataGeracao)
         webform.preencher_tela_servicos(mes, ano)
         webform.prencher_tela_valores()
+        logger.error("Mensagem de erro!!!!!!")
         webform.emitir_nota()
         
         download_info_xml = webform.baixar_arquivos('xml')
