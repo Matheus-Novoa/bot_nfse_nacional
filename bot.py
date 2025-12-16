@@ -2,13 +2,13 @@ from datetime import datetime
 from browser import Browser
 from dados import Dados
 from web_form import Webform
-from logging_config import get_logger
+from logging_config import get_logger, enviar_log_telegram
 
 
 logger = get_logger(__name__)
 
 
-def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
+async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
     sede = [texto for texto, var in sedes.items() if var.get()][0]
     # sede = [texto for texto, var in sedes.items() if var][0] # apenas para teste
 
@@ -31,39 +31,41 @@ def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
     ano = str(data_obj.year)
 
     dados_obj = Dados(arqPlanilha, sede)
-
     df_afazer = dados_obj.obter_dados().copy()
     df_afazer['Notas'] = df_afazer['Notas'].astype(str)
 
     browser = Browser(pastaDownload)
     page = browser.setup_browser()
-    webform = Webform(page, browser)
+    webform = await Webform.create(page, browser)
 
-    webform.acessar_portal()
-    webform.login()
-    webform.gerar_nova_nf(primeira=True)
+    try:
+        await webform.acessar_portal()
+        await webform.login()
+        await webform.gerar_nova_nf(primeira=True)
 
-    for cliente in df_afazer.itertuples():
-        webform.cliente = cliente
+        for cliente in df_afazer.itertuples():
+            webform.cliente = cliente
 
-        webform.preencher_tela_pessoas(dataGeracao)
-        webform.preencher_tela_servicos(mes, ano)
-        webform.prencher_tela_valores()
-        logger.error("Mensagem de erro!!!!!!")
-        webform.emitir_nota()
-        
-        download_info_xml = webform.baixar_arquivos('xml')
-        if download_info_xml:
-            webform.salvar_xml(download_info_xml)
+            await webform.preencher_tela_pessoas(dataGeracao)
+            await webform.preencher_tela_servicos(mes, ano)
+            await webform.prencher_tela_valores()
+            await enviar_log_telegram('Tudo certo')
+            await webform.emitir_nota()
+            
+            download_info_xml = await webform.baixar_arquivos('xml')
+            if download_info_xml:
+                webform.salvar_xml(download_info_xml)
 
-        download_info_pdf = webform.baixar_arquivos('pdf')
-        if download_info_pdf:
-            num_nfs = webform.processar_pdf(download_info_pdf)
+            download_info_pdf = await webform.baixar_arquivos('pdf')
+            if download_info_pdf:
+                num_nfs = webform.processar_pdf(download_info_pdf)
 
-            df_afazer.at[cliente.Index, 'Notas'] = num_nfs
-            dados_obj.registra_numero_notas(cliente.Index, num_nfs)
+                df_afazer.at[cliente.Index, 'Notas'] = num_nfs
+                dados_obj.registra_numero_notas(cliente.Index, num_nfs)
 
-        webform.gerar_nova_nf()
-
-    webform.logout()
-    browser.close_browser()
+            await webform.gerar_nova_nf()
+    except:
+        ...
+    finally:
+        await webform.logout()
+        await browser.close_browser()

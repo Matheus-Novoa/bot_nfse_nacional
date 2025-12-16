@@ -1,5 +1,6 @@
 import sys
 sys.coinit_flags = 2
+import asyncio
 
 import customtkinter as ctk
 import json
@@ -120,11 +121,12 @@ botao_formatar.grid(row=0, column=2, padx=5, pady=0, sticky="w")
 botao = ctk.CTkButton(
     janela,
     text='Iniciar',
-    command=lambda: main(dataGeracaoEntrada.get(),
-                         pastaDownload.get(),
-                         arqPlanilha.get(),
-                         checkbox_data
-                    )
+    command=lambda: asyncio.run(
+        main(dataGeracaoEntrada.get(),
+             pastaDownload.get(),
+             arqPlanilha.get(),
+             checkbox_data)
+    )
 )
 
 botao.grid(row=4, column=0, columnspan=3, padx=padx, pady=(10, pady), sticky="ew")
@@ -149,7 +151,7 @@ except json.decoder.JSONDecodeError:
 
 #------------------------ Grava cache ------------------------
 def gravar_cache():
-    with open(arquivoCache, 'w') as f:
+    with open(arquivoCache, 'w', encoding='utf-8') as f:
         dados = {
             'data': dataGeracaoEntrada.get(),
             'download': pastaDownload.get(),

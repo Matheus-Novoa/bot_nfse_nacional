@@ -1,10 +1,11 @@
-from patchright.sync_api import sync_playwright
+from patchright.async_api import async_playwright
 from pathlib import Path
 
 
 class Browser:
 
     def __init__(self, download_dir):
+        self.play_obj = None
         self.play = None
         self.browser = None
         self.page = None
@@ -13,16 +14,17 @@ class Browser:
         self._channel = 'chrome'
 
 
-    def setup_browser(self):
+    async def setup_browser(self):
         if not self._browser_dir.exists():
             self._browser_dir.mkdir(parents=True, exist_ok=True)
         
         if not self.download_dir.exists():
             self.download_dir.mkdir(parents=True, exist_ok=True)
 
-        self.play = sync_playwright().start()
+        self.play_obj = async_playwright().start()
+        self.play = await self.play_obj
         
-        self.browser = self.play.chromium.launch_persistent_context(
+        self.browser = await self.play.chromium.launch_persistent_context(
             user_data_dir=self._browser_dir.name,
             downloads_path=self.download_dir,
             channel=self._channel,
@@ -30,14 +32,14 @@ class Browser:
             ignore_https_errors=True,
             args=['--start-maximized']
         )
-        self.page = self.browser.new_page()
+        self.page = await self.browser.new_page()
 
         return self.page
     
-    def close_browser(self):
+    async def close_browser(self):
         if self.page:
-            self.page.close()
+            await self.page.close()
         if self.browser:
-            self.browser.close()
+            await self.browser.close()
         if self.play:
-            self.play.stop()
+            await self.play.stop()

@@ -12,6 +12,7 @@ wheels/
 *.ipynb
 cookies/
 browser_dir/
+logs/
 config.yml
 .cache
 *.log

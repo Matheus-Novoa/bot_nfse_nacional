@@ -12,7 +12,7 @@ dependencies = [
     "pdfplumber>=0.11.8",
     "playwright>=1.56.0",
     "pyautogui>=0.9.54",
-    "python-json-logger>=4.0.0",
+    "python-telegram-bot>=22.5",
     "pyyaml>=6.0.3",
     "tenacity>=9.1.2",
 ]

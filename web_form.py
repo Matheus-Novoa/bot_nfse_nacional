@@ -1,4 +1,4 @@
-from patchright.sync_api import expect, Page
+from patchright.async_api import expect, Page
 from patchright._impl._errors import TimeoutError as terror
 from browser import Browser
 from pathlib import Path
@@ -8,6 +8,7 @@ from functools import wraps
 from tenacity import retry, wait_fixed, retry_if_exception_type, stop_after_attempt
 from config import obter_dados_config
 from logging_config import get_logger
+import asyncio
 
 
 logger = get_logger(__name__)
@@ -35,7 +36,15 @@ class Webform:
         self.cliente = None
 
 
-    def acao_apos_falha_total(self, retry_state):
+    @classmethod
+    async def create(cls, page, browser: Browser):
+        # Await page if it's a coroutine to ensure it's the actual Page object
+        if asyncio.iscoroutine(page):
+            page = await page
+        return cls(page, browser)
+
+
+    async def acao_apos_falha_total(self, retry_state):
         """
         Função a ser chamada quando todas as tentativas falharem.
         """
@@ -48,93 +57,93 @@ class Webform:
         
         logger.critical("Fechando o sistema devido a erro persistente...")
         try:
-            self.logout()
+            await self.logout()
         finally:
-            self.browser.close_browser()
+            await self.browser.close_browser()
 
     
-    def acessar_portal(self):
+    async def acessar_portal(self):
         url = self.config['url']
         try:
-            self.page.goto(url, wait_until='networkidle', timeout=60000)
+            await self.page.goto(url, wait_until='networkidle', timeout=60000)
             btn_login_certif = self.page.locator("a.img-certificado")
-            expect(btn_login_certif).to_be_visible()
+            await expect(btn_login_certif).to_be_visible()
         except Exception as e:
             logger.critical(f'Falha ao acessar o portal: {e}')
-            self.browser.close_browser()
+            await self.browser.close_browser()
 
  
-    def login(self):
+    async def login(self):
         try:
             btn_login_certif = self.page.locator("a.img-certificado")
-            btn_login_certif.click()
+            await btn_login_certif.click()
             btn_nova_nfse = self.page.locator("a.btnAcesso[data-original-title='Nova NFS-e']")
-            expect(btn_nova_nfse).to_be_visible()        
+            await expect(btn_nova_nfse).to_be_visible()        
             logger.info('Autenticação bem-sucedida')
         except Exception as e:
             logger.error(f'Falha na autenticação: {e}')
             logger.error('Tentando regarregar a página...')
             try:
-                self.page.reload()
-                expect(btn_login_certif).to_be_visible()
+                await self.page.reload()
+                await expect(btn_login_certif).to_be_visible()
                 logger.info('Página recarregada')
             except:
                 logger.critical('Falha no recarregamento da página')
-                self.browser.close_browser()
+                await self.browser.close_browser()
 
 
-    def logout(self):
+    async def logout(self):
         menu_perfil = self.page.locator("li.dropdown.perfil")
-        menu_perfil.click()
-        expect(menu_perfil).to_be_visible()
-        self.page.get_by_role("link", name="Sair").click()
+        await menu_perfil.click()
+        await expect(menu_perfil).to_be_visible()
+        await self.page.get_by_role("link", name="Sair").click()
 
     
     @retentativa
-    def gerar_nova_nf(self, primeira=False):
+    async def gerar_nova_nf(self, primeira=False):
         try:
             if primeira:
                 btn_nova_nfse = self.page.locator("a.btnAcesso[data-original-title='Nova NFS-e']")
             else:
                 btn_nova_nfse = self.page.locator("#btnNovaNFSe")
-            btn_nova_nfse.click()
+            await btn_nova_nfse.click()
         except Exception as e:
             logger.error(f'Erro na geração da nova nota fiscal: {e}')
 
     
     @retentativa
-    def preencher_tela_pessoas(self, data):
+    async def preencher_tela_pessoas(self, data):
         try:
             logger.info(self.cliente.ResponsávelFinanceiro)
             logger.info(self.cliente.CPF)
             campo_data = self.page.locator("input.form-control.data")
-            expect(campo_data).to_be_editable()
+            await expect(campo_data).to_be_editable()
             logger.info('Tela PESSOAS carregada')
             
-            campo_data.click()
-            campo_data.fill(data)
-            self.page.locator("body").click()
+            await campo_data.click()
+            await campo_data.fill(data)
+            await self.page.locator("body").click()
 
             localizacao_tomador = self.page.locator("//div[@id='pnlTomador']//label[contains(.,'Brasil')]/span")
-            expect(localizacao_tomador).to_be_enabled()
-            localizacao_tomador.click()
+            await expect(localizacao_tomador).to_be_enabled()
+            await localizacao_tomador.click()
             
             cpf_tomador = self.page.locator('#Tomador_Inscricao')
-            cpf_tomador.fill(str(self.cliente.CPF))
+            await cpf_tomador.fill(str(self.cliente.CPF))
             
             btn_pesquisa_cpf = self.page.locator("#btn_Tomador_Inscricao_pesquisar")
-            btn_pesquisa_cpf.click()
+            await btn_pesquisa_cpf.click()
 
-            self.page.get_by_role("button", name="Avançar").click()
+            await self.page.get_by_role("button", name="Avançar").click()
         except terror as e:
             logger.error(f'SystemError: {e}')
             logger.error('Tentando regarregar a página...')
-            self.page.reload()
+            await self.page.reload()
             raise
 
     
     @retentativa
-    def preencher_tela_servicos(self, mes, ano):
+    async def preencher_tela_servicos(self, mes, ano):
         municipio = self.config['municipio']
         cod_trib_nac_completo = self.config['cod_trib_nac_completo']
         nbs_pre = self.config['nbs_pre']
@@ -142,44 +151,44 @@ class Webform:
         
         try:
             campo_municipio = self.page.locator("#pnlLocalPrestacao").get_by_label("")
-            expect(campo_municipio).to_be_enabled()
+            await expect(campo_municipio).to_be_enabled()
             logger.info('Tela SERVIÇOS carregada')
-            campo_municipio.click()
+            await campo_municipio.click()
 
             pesquisa_municipio = self.page.get_by_role("searchbox", name="Search")
-            pesquisa_municipio.fill(municipio)
+            await pesquisa_municipio.fill(municipio)
 
-            self.page.get_by_role("option", name=municipio).click()
+            await self.page.get_by_role("option", name=municipio).click()
 
             cod_trib_nac_prefix = cod_trib_nac_completo.split()[0].replace('.', '')
 
-            self.page.get_by_label("", exact=True).click()
+            await self.page.get_by_label("", exact=True).click()
             campo_busca_cod_trib_nac = self.page.get_by_role("searchbox", name="Search")
-            campo_busca_cod_trib_nac.fill(cod_trib_nac_prefix)
-            self.page.get_by_role("option", name=cod_trib_nac_completo).click()
+            await campo_busca_cod_trib_nac.fill(cod_trib_nac_prefix)
+            await self.page.get_by_role("option", name=cod_trib_nac_completo).click()
 
-            self.page.locator("i").nth(1).click()
+            await self.page.locator("i").nth(1).click()
             texto_descricao = f'PRESTAÇÃO DE SERVIÇO EDUCAÇÃO INFANTIL/FUNDAMENTAL MÊS {mes}/{ano} - ALUNO {self.cliente.Aluno}'
-            self.page.locator("#ServicoPrestado_Descricao").fill(texto_descricao)
+            await self.page.locator("#ServicoPrestado_Descricao").fill(texto_descricao)
 
             campo_nbs = self.page.locator("#ServicoPrestado_CodigoNBS_chosen")
-            campo_nbs.click()
+            await campo_nbs.click()
 
             nbs = nbs_pre if self.cliente.Acumulador == '1' else nbs_fund
 
-            campo_nbs.locator("input").press_sequentially(nbs.split(' ')[0], delay=50)
-            campo_nbs.locator("input").press("Enter")
+            await campo_nbs.locator("input").press_sequentially(nbs.split(' ')[0], delay=50)
+            await campo_nbs.locator("input").press("Enter")
 
-            self.page.get_by_role("button", name="Avançar").click()
+            await self.page.get_by_role("button", name="Avançar").click()
         except terror as e:
             logger.error(f'SystemError: {e}')
             logger.error('Tentando regarregar a página...')
-            self.page.reload()
+            await self.page.reload()
             raise
 
     
     @retentativa
-    def prencher_tela_valores(self):
+    async def prencher_tela_valores(self):
         situacao_trib = self.config['situacao_trib']
         aliq_pis = self.config['aliq_pis']
         aliq_cofins = self.config['aliq_cofins']
@@ -190,75 +199,75 @@ class Webform:
         try:
             logger.info(f'Valor: {self.cliente.ValorTotal}')
             campo_valor_servico = self.page.locator('#Valores_ValorServico')
-            expect(campo_valor_servico).to_be_editable()
+            await expect(campo_valor_servico).to_be_editable()
             logger.info('Tela VALORES carregada')
 
-            campo_valor_servico.fill(str(self.cliente.ValorTotal))
-            self.page.locator("body").click()
+            await campo_valor_servico.fill(str(self.cliente.ValorTotal))
+            await self.page.locator("body").click()
 
-            opcoes_trib_mun = self.page.locator("#pnlOperacaoTributavel label:has-text('Não') span").all()
+            opcoes_trib_mun = await self.page.locator("#pnlOperacaoTributavel label:has-text('Não') span").all()
             elegib_issqn = opcoes_trib_mun[0]
             retenc_issqn = opcoes_trib_mun[1]
             beneficio_mun = opcoes_trib_mun[2]
 
-            elegib_issqn.click()
-            retenc_issqn.click()
-            beneficio_mun.click()
+            await elegib_issqn.click()
+            await retenc_issqn.click()
+            await beneficio_mun.click()
 
             campo_situacao_trib = self.page.locator('#TributacaoFederal_PISCofins_SituacaoTributaria_chosen')
-            campo_situacao_trib.click()
-            campo_situacao_trib.get_by_text(situacao_trib).click()
+            await campo_situacao_trib.click()
+            await campo_situacao_trib.get_by_text(situacao_trib).click()
 
             check_n_retido = self.page.locator("label:has-text('Não Retido') span")
-            check_n_retido.click()
+            await check_n_retido.click()
 
             base_calc = self.page.locator('#TributacaoFederal_PISCofins_BaseDeCalculo')
-            base_calc.fill(str(self.cliente.ValorTotal))
+            await base_calc.fill(str(self.cliente.ValorTotal))
 
             campo_aliq_pis = self.page.locator('#TributacaoFederal_PISCofins_AliquotaPIS')
-            campo_aliq_pis.fill(aliq_pis)
+            await campo_aliq_pis.fill(aliq_pis)
             
             campo_aliq_cofins = self.page.locator('#TributacaoFederal_PISCofins_AliquotaCOFINS')
-            campo_aliq_cofins.fill(aliq_cofins)
+            await campo_aliq_cofins.fill(aliq_cofins)
 
             config_valores = self.page.locator("label:has-text('Configurar os valores percentuais correspondentes') span")
-            config_valores.click()
+            await config_valores.click()
 
             percent_fed = self.page.locator("#ValorTributos_PercentualTotalFederal")
-            percent_fed.fill(trib_fed)
+            await percent_fed.fill(trib_fed)
             
             percent_est = self.page.locator("#ValorTributos_PercentualTotalEstadual")
-            percent_est.fill(trib_est)
+            await percent_est.fill(trib_est)
             
             percent_mun = self.page.locator("#ValorTributos_PercentualTotalMunicipal")
-            percent_mun.fill(trib_mun)
+            await percent_mun.fill(trib_mun)
 
-            self.page.get_by_role("button", name="Avançar").click()
+            await self.page.get_by_role("button", name="Avançar").click()
         except terror as e:
             logger.error(f'SystemError: {e}')
             logger.error('Tentando regarregar a página...')
-            self.page.reload()
+            await self.page.reload()
             raise
 
     
     @retentativa
-    def emitir_nota(self):
+    async def emitir_nota(self):
         emitir_nfse = self.page.locator("#btnProsseguir")
-        emitir_nfse.click()
+        await emitir_nfse.click()
 
     
     @retentativa
-    def baixar_arquivos(self, formato):
+    async def baixar_arquivos(self, formato):
         formatos = {
             'xml': self.page.locator("#btnDownloadXml"),
             'pdf': self.page.locator("#btnDownloadDANFSE")
         }
         
         btn_download = formatos.get(formato)
-        expect(btn_download).to_be_enabled(timeout=30000)
+        await expect(btn_download).to_be_enabled(timeout=30000)
 
         with self.page.expect_download() as download_info:
-            btn_download.click()
+            await btn_download.click()
 
         return download_info
     
