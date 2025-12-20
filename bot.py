@@ -49,23 +49,24 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
             await webform.preencher_tela_pessoas(dataGeracao)
             await webform.preencher_tela_servicos(mes, ano)
             await webform.prencher_tela_valores()
-            await enviar_log_telegram('Tudo certo')
             await webform.emitir_nota()
             
-            download_info_xml = await webform.baixar_arquivos('xml')
-            if download_info_xml:
-                webform.salvar_xml(download_info_xml)
-
             download_info_pdf = await webform.baixar_arquivos('pdf')
             if download_info_pdf:
-                num_nfs = webform.processar_pdf(download_info_pdf)
+                num_nfs = await webform.processar_pdf(download_info_pdf)
 
                 df_afazer.at[cliente.Index, 'Notas'] = num_nfs
                 dados_obj.registra_numero_notas(cliente.Index, num_nfs)
+            
+            download_info_xml = await webform.baixar_arquivos('xml')
+            if download_info_xml:
+                await webform.salvar_xml(download_info_xml, num_nfs)
 
             await webform.gerar_nova_nf()
-    except:
-        ...
+    except Exception as e:
+        logger.error(e)
+        await enviar_log_telegram(f'Erro:\n{e}')
     finally:
         await webform.logout()
         await browser.close_browser()
+        await enviar_log_telegram('Processo finalizado')

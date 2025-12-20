@@ -117,7 +117,7 @@ class Webform:
             logger.info(self.cliente.ResponsávelFinanceiro)
             logger.info(self.cliente.CPF)
             campo_data = self.page.locator("input.form-control.data")
-            await expect(campo_data).to_be_editable()
+            await expect(campo_data).to_be_editable(timeout=30000)
             logger.info('Tela PESSOAS carregada')
             
             await campo_data.click()
@@ -125,7 +125,7 @@ class Webform:
             await self.page.locator("body").click()
 
             localizacao_tomador = self.page.locator("//div[@id='pnlTomador']//label[contains(.,'Brasil')]/span")
-            await expect(localizacao_tomador).to_be_enabled()
+            await expect(localizacao_tomador).to_be_enabled(timeout=30000)
             await localizacao_tomador.click()
             
             cpf_tomador = self.page.locator('#Tomador_Inscricao')
@@ -140,6 +140,9 @@ class Webform:
             logger.error('Tentando regarregar a página...')
             await self.page.reload()
             raise
+        except Exception as e:
+            logger.error('Erro inesperado ao preencher a tela de pessoas')
+            logger.error(e)
 
     
     @retentativa
@@ -151,7 +154,7 @@ class Webform:
         
         try:
             campo_municipio = self.page.locator("#pnlLocalPrestacao").get_by_label("")
-            await expect(campo_municipio).to_be_enabled()
+            await expect(campo_municipio).to_be_enabled(timeout=30000)
             logger.info('Tela SERVIÇOS carregada')
             await campo_municipio.click()
 
@@ -185,6 +188,9 @@ class Webform:
             logger.error('Tentando regarregar a página...')
             await self.page.reload()
             raise
+        except Exception as e:
+            logger.error('Erro inesperado ao preencher a tela de serviços')
+            logger.error(e)
 
     
     @retentativa
@@ -199,7 +205,7 @@ class Webform:
         try:
             logger.info(f'Valor: {self.cliente.ValorTotal}')
             campo_valor_servico = self.page.locator('#Valores_ValorServico')
-            await expect(campo_valor_servico).to_be_editable()
+            await expect(campo_valor_servico).to_be_editable(timeout=30000)
             logger.info('Tela VALORES carregada')
 
             await campo_valor_servico.fill(str(self.cliente.ValorTotal))
@@ -266,25 +272,26 @@ class Webform:
         btn_download = formatos.get(formato)
         await expect(btn_download).to_be_enabled(timeout=30000)
 
-        with self.page.expect_download() as download_info:
+        async with self.page.expect_download() as download_info:
             await btn_download.click()
 
-        return download_info
+        download = await download_info.value
+        return download
     
  
-    def salvar_xml(self, download_info):
-        download_xml = download_info.value
-        original_path = Path(download_xml.path())
+    async def salvar_xml(self, download_info, num_nfs):
+        download_path = await download_info.path()
+        original_path = Path(download_path)
 
-        novo_path = original_path.parent / f"nfse_{str(self.cliente.CPF).replace('.', '').replace('-', '')}_{self.cliente.Index}.xml"
+        novo_path = original_path.parent / f"nfse_{num_nfs}.xml"
         original_path.rename(novo_path)
         logger.info(f"Arquivo NFSe (XML) salvo em: {novo_path}")
 
   
-    def processar_pdf(self, download_info):
-        download_pdf = download_info.value
+    async def processar_pdf(self, download_info):
         try:
-            pdf_bytes = Path(download_pdf.path()).read_bytes()
+            download_path = await download_info.path()
+            pdf_bytes = Path(download_path).read_bytes()
             pdf_file = BytesIO(pdf_bytes)
             
             with pdfplumber.open(pdf_file) as pdf:
@@ -296,7 +303,10 @@ class Webform:
             pos_num_nfs = 0
             num_nfs = textoBruto.splitlines()[linha_num_nfs].split()[pos_num_nfs]
             logger.info(f"Número da NFS-e extraído do PDF: {num_nfs}")
-        finally:
-            download_pdf.delete()
             logger.info("Arquivo PDF temporário processado e deletado.")
             return num_nfs
+        except Exception as e:
+            logger.error(f"Erro ao processar o PDF: {e}")
+        finally:
+            if download_info and hasattr(download_info, 'delete'):
+                await download_info.delete()
