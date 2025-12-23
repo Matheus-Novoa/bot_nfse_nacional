@@ -117,7 +117,7 @@ class Webform:
             logger.info(self.cliente.ResponsávelFinanceiro)
             logger.info(self.cliente.CPF)
             campo_data = self.page.locator("input.form-control.data")
-            await expect(campo_data).to_be_editable(timeout=30000)
+            await expect(campo_data).to_be_editable()
             logger.info('Tela PESSOAS carregada')
             
             await campo_data.click()
@@ -125,7 +125,7 @@ class Webform:
             await self.page.locator("body").click()
 
             localizacao_tomador = self.page.locator("//div[@id='pnlTomador']//label[contains(.,'Brasil')]/span")
-            await expect(localizacao_tomador).to_be_enabled(timeout=30000)
+            await expect(localizacao_tomador).to_be_enabled()
             await localizacao_tomador.click()
             
             cpf_tomador = self.page.locator('#Tomador_Inscricao')
@@ -136,6 +136,11 @@ class Webform:
 
             await self.page.get_by_role("button", name="Avançar").click()
         except terror as e:
+            logger.error(f'SystemError: {e}')
+            logger.error('Tentando regarregar a página...')
+            await self.page.reload()
+            raise
+        except AssertionError as e:
             logger.error(f'SystemError: {e}')
             logger.error('Tentando regarregar a página...')
             await self.page.reload()
@@ -154,7 +159,7 @@ class Webform:
         
         try:
             campo_municipio = self.page.locator("#pnlLocalPrestacao").get_by_label("")
-            await expect(campo_municipio).to_be_enabled(timeout=30000)
+            await expect(campo_municipio).to_be_enabled()
             logger.info('Tela SERVIÇOS carregada')
             await campo_municipio.click()
 
@@ -188,6 +193,11 @@ class Webform:
             logger.error('Tentando regarregar a página...')
             await self.page.reload()
             raise
+        except AssertionError as e:
+            logger.error(f'SystemError: {e}')
+            logger.error('Tentando regarregar a página...')
+            await self.page.reload()
+            raise
         except Exception as e:
             logger.error('Erro inesperado ao preencher a tela de serviços')
             logger.error(e)
@@ -205,7 +215,7 @@ class Webform:
         try:
             logger.info(f'Valor: {self.cliente.ValorTotal}')
             campo_valor_servico = self.page.locator('#Valores_ValorServico')
-            await expect(campo_valor_servico).to_be_editable(timeout=30000)
+            await expect(campo_valor_servico).to_be_editable()
             logger.info('Tela VALORES carregada')
 
             await campo_valor_servico.fill(str(self.cliente.ValorTotal))
@@ -254,6 +264,14 @@ class Webform:
             logger.error('Tentando regarregar a página...')
             await self.page.reload()
             raise
+        except AssertionError as e:
+            logger.error(f'SystemError: {e}')
+            logger.error('Tentando regarregar a página...')
+            await self.page.reload()
+            raise
+        except Exception as e:
+            logger.error('Erro inesperado ao preencher a tela de valores')
+            logger.error(e)
 
     
     @retentativa
