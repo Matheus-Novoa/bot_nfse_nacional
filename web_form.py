@@ -23,7 +23,6 @@ class Webform:
 
     @classmethod
     async def create(cls, page, browser: Browser):
-
         if asyncio.iscoroutine(page):
             page = await page
         return cls(page, browser)
@@ -61,8 +60,11 @@ class Webform:
         try:
             menu_perfil = self.page.locator("li.dropdown.perfil")
             await menu_perfil.click()
-            await expect(menu_perfil).to_be_visible()
+            await expect(menu_perfil).to_be_enabled()
             await self.page.get_by_role("link", name="Sair").click()
+        except PlayTimeoutError:
+            logger.warning("Timeout ao tentar realizar logout")
+            raise SystemTimeoutError(e)
         except Exception as e:
             logger.error(f'Erro ao fazer logout: {e}')
             raise ErroTecnico(e)

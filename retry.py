@@ -17,7 +17,7 @@ def ui_retry(func):
             if (isinstance(exc, SystemTimeoutError) or
                 isinstance(exc, SystemAssertionError)
             ):
-                logger.error('Tentando regarregar a página...')
+                logger.warning('Tentando regarregar a página...')
                 await self.page.reload()
         dec = retry(
             retry=retry_if_exception_type((SystemTimeoutError, SystemAssertionError)),
@@ -39,7 +39,7 @@ def bootstrap_retry(func):
 
             if isinstance(exc, SystemTimeoutError):
                 if hasattr(self, 'page') and self.page:
-                    logger.error('Tentando regarregar a página...')
+                    logger.warning('Tentando regarregar a página...')
                     await self.page.reload()
 
         dec = retry(

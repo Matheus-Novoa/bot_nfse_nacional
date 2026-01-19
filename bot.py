@@ -3,6 +3,7 @@ from browser import Browser
 from dados import Dados
 from web_form import Webform
 from logging_config import get_logger, enviar_log_telegram
+from exceptions import ErroNegocio, ErroTecnico
 
 
 logger = get_logger(__name__)
@@ -42,6 +43,10 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
         await webform.acessar_portal()
         await webform.login()
         await webform.gerar_nova_nf(primeira=True)
+    except ErroNegocio as e:
+        logger.critical('Falha funcional na inicialização: {e}')
+        await enviar_log_telegram(f'Falha funcional na inicialização: {e}')
+        return
 
         for cliente in df_afazer.itertuples():
             webform.cliente = cliente
