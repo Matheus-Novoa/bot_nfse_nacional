@@ -49,10 +49,10 @@ class Webform:
             await expect(btn_nova_nfse).to_be_visible()        
             logger.info('Autenticação bem-sucedida')
         except PlayTimeoutError as e:
-            logger.error('Portal instável')
+            logger.error(f'Portal instável: {e}')
             raise SystemTimeoutError(e)
         except Exception as e:
-            logger.error(f'Falha na autenticação: {e}')
+            logger.error(f'Falha inesperada na autenticação: {e}')
             raise ErroTecnico(e)
 
 
@@ -79,11 +79,11 @@ class Webform:
                 btn_nova_nfse = self.page.locator("#btnNovaNFSe")
             await btn_nova_nfse.click()
         except PlayTimeoutError as e:
-            logger.error(f'Erro na geração da nova nota fiscal: {e}')
-            logger.error('Tentando regarregar a página [NOVA NFSE]...')
+            logger.error(f'Timeout na geração da nova nota fiscal: {e}')
+            logger.warning('Tentando regarregar a página [NOVA NFSE]...')
             raise SystemTimeoutError(e)
         except Exception as e:
-            logger.error(f'SystemError: {e}')
+            logger.error(f'Erro inesperado na geração da nova nota fiscal: {e}')
             raise ErroTecnico(e)
 
     
@@ -112,17 +112,17 @@ class Webform:
 
             await self.page.get_by_role("button", name="Avançar").click()
         except PlayTimeoutError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página [PESSOAS]...')
+            logger.error(f'Timeout na tela [PESSOAS]: {e}')
+            logger.warning('Tentando regarregar a página [PESSOAS]...')
             raise SystemTimeoutError(e)
         except AssertionError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página [PESSOAS]...')
+            logger.error(f'Erro de asserção na tela [PESSOAS]: {e}')
+            logger.warning('Tentando regarregar a página [PESSOAS]...')
             raise SystemAssertionError(e)
         except ErroNegocio:
-            raise
+            raise ErroNegocio('Erro na tela [PESSOAS]')
         except Exception as e:
-            logger.error('Erro inesperado ao preencher a tela de pessoas')
+            logger.error('Erro inesperado ao preencher a página [PESSOAS]')
             logger.error(e)
             raise ErroTecnico(e)
 
@@ -166,17 +166,17 @@ class Webform:
 
             await self.page.get_by_role("button", name="Avançar").click()
         except PlayTimeoutError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página [SERVIÇOS]...')
+            logger.error(f'Timeout na tela [SERVIÇOS]: {e}')
+            logger.warning('Tentando regarregar a página [SERVIÇOS]...')
             raise SystemTimeoutError(e)
         except AssertionError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página [SERVIÇOS]...')
+            logger.error(f'Erro de asserção na tela [SERVIÇOS]: {e}')
+            logger.warning('Tentando regarregar a página [SERVIÇOS]...')
             raise SystemAssertionError(e)
         except ErroNegocio:
-            raise
+            raise ErroNegocio('Erro na tela [SERVIÇOS]')
         except Exception as e:
-            logger.error('Erro inesperado ao preencher a tela de serviços')
+            logger.error('Erro inesperado ao preencher a tela [SERVIÇOS]')
             logger.error(e)
             raise ErroTecnico(e)
 
@@ -238,17 +238,17 @@ class Webform:
 
             await self.page.get_by_role("button", name="Avançar").click()
         except PlayTimeoutError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página [VALORES]...')
+            logger.error(f'Timeout na tela [VALORES]: {e}')
+            logger.warning('Tentando regarregar a página [VALORES]...')
             raise SystemTimeoutError(e)
         except AssertionError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página [VALORES]...')
+            logger.error(f'Erro de asserção na tela [VALORES]: {e}')
+            logger.warning('Tentando regarregar a página [VALORES]...')
             raise SystemAssertionError(e)
         except ErroNegocio:
-            raise
+            raise ErroNegocio('Erro na tela [VALORES]')
         except Exception as e:
-            logger.error('Erro inesperado ao preencher a tela de valores')
+            logger.error('Erro inesperado ao preencher a tela [VALORES]')
             logger.error(e)
             raise ErroTecnico(e)
 
@@ -260,10 +260,11 @@ class Webform:
             expect(emitir_nfse).to_be_enabled()
             await emitir_nfse.click()
         except PlayTimeoutError as e:
-            logger.error('Tentando regarregar a página [EMITIR NFSE]...')
+            logger.error(f'Timeout na tela [EMITIR NFSE]: {e}')
+            logger.warning('Tentando regarregar a página [EMITIR NFSE]')
             raise SystemTimeoutError(e)
         except Exception as e:
-            logger.error(f'SystemError: {e}')
+            logger.error(f'Erro inesperado na tela [EMITIR NFSE]: {e}')
             raise ErroTecnico(e)
 
     
@@ -284,10 +285,10 @@ class Webform:
             download = await download_info.value
             return download
         except PlayTimeoutError as e:
-            logger.error('Erro no download do arquivo')
+            logger.error(f'Erro no download do arquivo: {e}')
             raise SystemTimeoutError(e)
         except Exception as e:
-            logger.error(f'SystemError: {e}')
+            logger.error(f'Erro inesperado no download do arquivo: {e}')
             raise ErroTecnico(e)
 
  
@@ -301,13 +302,13 @@ class Webform:
             if not original_path.exists():
                 raise ErroTecnico(f"Arquivo não encontrado: {original_path}")
 
-            novo_path = original_path.parent / f"nfse_{num_nfs}.xml"
+            novo_path = original_path.parent / f"nfse_{num_nfs:0>4}.xml"
             original_path.rename(novo_path)
             logger.info(f"Arquivo NFSe (XML) salvo em: {novo_path}")
         except ErroNegocio as e:
             raise
         except Exception as e:
-            logger.error(f"Erro ao salvar o arquivo XML: {e}")
+            logger.error(f"Erro inesperado ao salvar o arquivo XML: {e}")
             raise ErroTecnico(e)
 
   
@@ -330,16 +331,6 @@ class Webform:
                 num_nfs = linhas[linha_num_nfs].split()[pos_num_nfs]
             except (IndexError, ValueError):
                 raise ErroNegocio('Número da NFS-e não encontrado no PDF')
-            
-            match len(num_nfs):
-                case 1:
-                    num_nfs = '000' + num_nfs
-                case 2:
-                    num_nfs = '00' + num_nfs
-                case 3:
-                    num_nfs = '0' + num_nfs
-                case _:
-                    pass
 
             logger.info(f"Número da NFS-e extraído do PDF: {num_nfs}")
             logger.info("Arquivo PDF temporário processado e deletado.")
@@ -347,7 +338,7 @@ class Webform:
         except ErroNegocio as e:
             raise
         except Exception as e:
-            logger.error(f"Erro ao processar o PDF: {e}")
+            logger.error(f"Erro inesperado ao processar o PDF: {e}")
             raise ErroTecnico(e)
         finally:
             if download_info and hasattr(download_info, 'delete'):

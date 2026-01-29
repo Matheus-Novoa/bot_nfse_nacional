@@ -40,38 +40,63 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
     webform = await Webform.create(page, browser)
 
     try:
-        await webform.acessar_portal()
-        await webform.login()
-        await webform.gerar_nova_nf(primeira=True)
-    except ErroNegocio as e:
-        logger.critical('Falha funcional na inicialização: {e}')
-        await enviar_log_telegram(f'Falha funcional na inicialização: {e}')
-        return
-
+        try:
+            await webform.acessar_portal()
+            await webform.login()
+            await webform.gerar_nova_nf(primeira=True)
+        except ErroNegocio as e:
+            logger.critical('Falha funcional na inicialização: {e}')
+            await enviar_log_telegram(f'Falha funcional na inicialização: {e}')
+            return
+        except ErroTecnico as e:
+            logger.critical('Falha técnica na inicialização: {e}')
+            await enviar_log_telegram(f'Falha técnica na inicialização: {e}')
+            raise
         for cliente in df_afazer.itertuples():
             webform.cliente = cliente
+            try:
+                await webform.preencher_tela_pessoas(dataGeracao)
+                await webform.preencher_tela_servicos(mes, ano)
+                await webform.prencher_tela_valores()
+                await webform.emitir_nota()
+                
+                download_info_pdf = await webform.baixar_arquivos('pdf')
+                if download_info_pdf:
+                    num_nfs = await webform.processar_pdf(download_info_pdf)
 
-            await webform.preencher_tela_pessoas(dataGeracao)
-            await webform.preencher_tela_servicos(mes, ano)
-            await webform.prencher_tela_valores()
-            await webform.emitir_nota()
-            
-            download_info_pdf = await webform.baixar_arquivos('pdf')
-            if download_info_pdf:
-                num_nfs = await webform.processar_pdf(download_info_pdf)
+                    df_afazer.at[cliente.Index, 'Notas'] = num_nfs
+                    dados_obj.registra_numero_notas(cliente.Index, num_nfs)
+                
+                download_info_xml = await webform.baixar_arquivos('xml')
+                if download_info_xml:
+                    await webform.salvar_xml(download_info_xml, num_nfs)
 
-                df_afazer.at[cliente.Index, 'Notas'] = num_nfs
-                dados_obj.registra_numero_notas(cliente.Index, num_nfs)
-            
-            download_info_xml = await webform.baixar_arquivos('xml')
-            if download_info_xml:
-                await webform.salvar_xml(download_info_xml, num_nfs)
+                await webform.gerar_nova_nf()
 
-            await webform.gerar_nova_nf()
-    except Exception as e:
-        logger.error(e)
-        await enviar_log_telegram(f'Erro:\n{e}')
+            except ErroNegocio as e:
+                logger.error(f'[cliente={cliente.Index}] Erro funcional: {e}')
+                await enviar_log_telegram(
+                    f'[cliente={cliente.Index}] Erro funcional: {e}'
+                )
+                continue
+            except ErroTecnico as e:
+                logger.critical(
+                    f'[cliente={cliente.Index}] Erro técnico - abortando lote: {e}',
+                    exc_info=True
+                )
+                await enviar_log_telegram(
+                    f'[cliente={cliente.Index}] Erro técnico - abortando lote: {e}'
+                )
+                raise
     finally:
-        await webform.logout()
-        await browser.close_browser()
+        try:
+            await webform.logout()
+        except Exception:
+            logger.warning('Falha ao realizar logout', exc_info=True)
+
+        try:
+            await browser.close_browser()
+        except Exception:
+            logger.warning('Falha ao fechar o navegador', exc_info=True)
+
         await enviar_log_telegram('Processo finalizado')

@@ -17,11 +17,10 @@ def ui_retry(func):
             if (isinstance(exc, SystemTimeoutError) or
                 isinstance(exc, SystemAssertionError)
             ):
-                logger.warning('Tentando regarregar a página...')
                 await self.page.reload()
         dec = retry(
             retry=retry_if_exception_type((SystemTimeoutError, SystemAssertionError)),
-            wait=wait_fixed(3),
+            wait=wait_fixed(1),
             stop=stop_after_attempt(3),
             before_sleep=before_retry,
             reraise=True
@@ -39,12 +38,11 @@ def bootstrap_retry(func):
 
             if isinstance(exc, SystemTimeoutError):
                 if hasattr(self, 'page') and self.page:
-                    logger.warning('Tentando regarregar a página...')
                     await self.page.reload()
 
         dec = retry(
             retry=retry_if_exception_type(SystemTimeoutError),
-            wait=wait_fixed(3),
+            wait=wait_fixed(1),
             stop=stop_after_attempt(2),
             before_sleep=before_retry,
             reraise=True
