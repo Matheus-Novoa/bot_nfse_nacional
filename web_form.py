@@ -1,32 +1,17 @@
 from patchright.async_api import expect, Page
-from patchright._impl._errors import TimeoutError as terror
+from patchright._impl._errors import TimeoutError as PlayTimeoutError
 from browser import Browser
 from pathlib import Path
 import pdfplumber
 from io import BytesIO
-from functools import wraps
-from tenacity import retry, wait_fixed, retry_if_exception_type, stop_after_attempt
 from config import obter_dados_config
 from logging_config import get_logger
 import asyncio
+from exceptions import *
+from retry import ui_retry, bootstrap_retry
 
 
 logger = get_logger(__name__)
-
-
-def retentativa(func):
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        dec = retry(
-            retry=retry_if_exception_type((terror, AssertionError)),
-            wait=wait_fixed(3),
-            stop=stop_after_attempt(3),
-            retry_error_callback=lambda rs: self.acao_apos_falha_total(rs)
-        )
-        bound = func.__get__(self, type(self))
-        return dec(bound)(*args, **kwargs)
-    return wrapper
-
 
 class Webform:
     def __init__(self, page: Page, browser: Browser):
@@ -38,30 +23,12 @@ class Webform:
 
     @classmethod
     async def create(cls, page, browser: Browser):
-        # Await page if it's a coroutine to ensure it's the actual Page object
         if asyncio.iscoroutine(page):
             page = await page
         return cls(page, browser)
-
-
-    async def acao_apos_falha_total(self, retry_state):
-        """
-        Função a ser chamada quando todas as tentativas falharem.
-        """
-        logger.critical("="*50)
-        logger.critical("ERRO CRÍTICO: Não foi possível preencher a tela de valores após múltiplas tentativas.")
-        
-        ultima_excecao = retry_state.outcome.exception()
-        logger.critical(f"Última exceção capturada: {ultima_excecao}")
-        logger.critical(f"Total de tentativas: {retry_state.attempt_number}")
-        
-        logger.critical("Fechando o sistema devido a erro persistente...")
-        try:
-            await self.logout()
-        finally:
-            await self.browser.close_browser()
-
     
+
+    @bootstrap_retry
     async def acessar_portal(self):
         url = self.config['url']
         try:
@@ -70,9 +37,10 @@ class Webform:
             await expect(btn_login_certif).to_be_visible()
         except Exception as e:
             logger.critical(f'Falha ao acessar o portal: {e}')
-            await self.browser.close_browser()
+            raise ErroTecnico(e)
 
- 
+
+    @bootstrap_retry
     async def login(self):
         try:
             btn_login_certif = self.page.locator("a.img-certificado")
@@ -80,26 +48,29 @@ class Webform:
             btn_nova_nfse = self.page.locator("a.btnAcesso[data-original-title='Nova NFS-e']")
             await expect(btn_nova_nfse).to_be_visible()        
             logger.info('Autenticação bem-sucedida')
+        except PlayTimeoutError as e:
+            logger.error(f'Portal instável: {e}')
+            raise SystemTimeoutError(e)
         except Exception as e:
-            logger.error(f'Falha na autenticação: {e}')
-            logger.error('Tentando regarregar a página...')
-            try:
-                await self.page.reload()
-                await expect(btn_login_certif).to_be_visible()
-                logger.info('Página recarregada')
-            except:
-                logger.critical('Falha no recarregamento da página')
-                await self.browser.close_browser()
+            logger.error(f'Falha inesperada na autenticação: {e}')
+            raise ErroTecnico(e)
 
 
     async def logout(self):
-        menu_perfil = self.page.locator("li.dropdown.perfil")
-        await menu_perfil.click()
-        await expect(menu_perfil).to_be_visible()
-        await self.page.get_by_role("link", name="Sair").click()
+        try:
+            menu_perfil = self.page.locator("li.dropdown.perfil")
+            await menu_perfil.click()
+            await expect(menu_perfil).to_be_enabled()
+            await self.page.get_by_role("link", name="Sair").click()
+        except PlayTimeoutError:
+            logger.warning("Timeout ao tentar realizar logout")
+            raise SystemTimeoutError(e)
+        except Exception as e:
+            logger.error(f'Erro ao fazer logout: {e}')
+            raise ErroTecnico(e)
 
     
-    @retentativa
+    @ui_retry
     async def gerar_nova_nf(self, primeira=False):
         try:
             if primeira:
@@ -107,11 +78,16 @@ class Webform:
             else:
                 btn_nova_nfse = self.page.locator("#btnNovaNFSe")
             await btn_nova_nfse.click()
+        except PlayTimeoutError as e:
+            logger.error(f'Timeout na geração da nova nota fiscal: {e}')
+            logger.warning('Tentando regarregar a página [NOVA NFSE]...')
+            raise SystemTimeoutError(e)
         except Exception as e:
-            logger.error(f'Erro na geração da nova nota fiscal: {e}')
+            logger.error(f'Erro inesperado na geração da nova nota fiscal: {e}')
+            raise ErroTecnico(e)
 
     
-    @retentativa
+    @ui_retry
     async def preencher_tela_pessoas(self, data):
         try:
             logger.info(self.cliente.ResponsávelFinanceiro)
@@ -135,22 +111,23 @@ class Webform:
             await btn_pesquisa_cpf.click()
 
             await self.page.get_by_role("button", name="Avançar").click()
-        except terror as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página...')
-            await self.page.reload()
-            raise
+        except PlayTimeoutError as e:
+            logger.error(f'Timeout na tela [PESSOAS]: {e}')
+            logger.warning('Tentando regarregar a página [PESSOAS]...')
+            raise SystemTimeoutError(e)
         except AssertionError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página...')
-            await self.page.reload()
-            raise
+            logger.error(f'Erro de asserção na tela [PESSOAS]: {e}')
+            logger.warning('Tentando regarregar a página [PESSOAS]...')
+            raise SystemAssertionError(e)
+        except ErroNegocio:
+            raise ErroNegocio('Erro na tela [PESSOAS]')
         except Exception as e:
-            logger.error('Erro inesperado ao preencher a tela de pessoas')
+            logger.error('Erro inesperado ao preencher a página [PESSOAS]')
             logger.error(e)
+            raise ErroTecnico(e)
 
     
-    @retentativa
+    @ui_retry
     async def preencher_tela_servicos(self, mes, ano):
         municipio = self.config['municipio']
         cod_trib_nac_completo = self.config['cod_trib_nac_completo']
@@ -188,22 +165,23 @@ class Webform:
             await campo_nbs.locator("input").press("Enter")
 
             await self.page.get_by_role("button", name="Avançar").click()
-        except terror as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página...')
-            await self.page.reload()
-            raise
+        except PlayTimeoutError as e:
+            logger.error(f'Timeout na tela [SERVIÇOS]: {e}')
+            logger.warning('Tentando regarregar a página [SERVIÇOS]...')
+            raise SystemTimeoutError(e)
         except AssertionError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página...')
-            await self.page.reload()
-            raise
+            logger.error(f'Erro de asserção na tela [SERVIÇOS]: {e}')
+            logger.warning('Tentando regarregar a página [SERVIÇOS]...')
+            raise SystemAssertionError(e)
+        except ErroNegocio:
+            raise ErroNegocio('Erro na tela [SERVIÇOS]')
         except Exception as e:
-            logger.error('Erro inesperado ao preencher a tela de serviços')
+            logger.error('Erro inesperado ao preencher a tela [SERVIÇOS]')
             logger.error(e)
+            raise ErroTecnico(e)
 
     
-    @retentativa
+    @ui_retry
     async def prencher_tela_valores(self):
         situacao_trib = self.config['situacao_trib']
         aliq_pis = self.config['aliq_pis']
@@ -259,51 +237,79 @@ class Webform:
             await percent_mun.fill(trib_mun)
 
             await self.page.get_by_role("button", name="Avançar").click()
-        except terror as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página...')
-            await self.page.reload()
-            raise
+        except PlayTimeoutError as e:
+            logger.error(f'Timeout na tela [VALORES]: {e}')
+            logger.warning('Tentando regarregar a página [VALORES]...')
+            raise SystemTimeoutError(e)
         except AssertionError as e:
-            logger.error(f'SystemError: {e}')
-            logger.error('Tentando regarregar a página...')
-            await self.page.reload()
-            raise
+            logger.error(f'Erro de asserção na tela [VALORES]: {e}')
+            logger.warning('Tentando regarregar a página [VALORES]...')
+            raise SystemAssertionError(e)
+        except ErroNegocio:
+            raise ErroNegocio('Erro na tela [VALORES]')
         except Exception as e:
-            logger.error('Erro inesperado ao preencher a tela de valores')
+            logger.error('Erro inesperado ao preencher a tela [VALORES]')
             logger.error(e)
+            raise ErroTecnico(e)
 
     
-    @retentativa
+    @ui_retry
     async def emitir_nota(self):
-        emitir_nfse = self.page.locator("#btnProsseguir")
-        await emitir_nfse.click()
+        try:
+            emitir_nfse = self.page.locator("#btnProsseguir")
+            expect(emitir_nfse).to_be_enabled()
+            await emitir_nfse.click()
+        except PlayTimeoutError as e:
+            logger.error(f'Timeout na tela [EMITIR NFSE]: {e}')
+            logger.warning('Tentando regarregar a página [EMITIR NFSE]')
+            raise SystemTimeoutError(e)
+        except Exception as e:
+            logger.error(f'Erro inesperado na tela [EMITIR NFSE]: {e}')
+            raise ErroTecnico(e)
 
     
-    @retentativa
+    @ui_retry
     async def baixar_arquivos(self, formato):
-        formatos = {
-            'xml': self.page.locator("#btnDownloadXml"),
-            'pdf': self.page.locator("#btnDownloadDANFSE")
-        }
-        
-        btn_download = formatos.get(formato)
-        await expect(btn_download).to_be_enabled(timeout=30000)
+        try:
+            formatos = {
+                'xml': self.page.locator("#btnDownloadXml"),
+                'pdf': self.page.locator("#btnDownloadDANFSE")
+            }
+            
+            btn_download = formatos.get(formato)
+            await expect(btn_download).to_be_enabled(timeout=30000)
 
-        async with self.page.expect_download() as download_info:
-            await btn_download.click()
+            async with self.page.expect_download() as download_info:
+                await btn_download.click()
 
-        download = await download_info.value
-        return download
-    
+            download = await download_info.value
+            return download
+        except PlayTimeoutError as e:
+            logger.error(f'Erro no download do arquivo: {e}')
+            raise SystemTimeoutError(e)
+        except Exception as e:
+            logger.error(f'Erro inesperado no download do arquivo: {e}')
+            raise ErroTecnico(e)
+
  
     async def salvar_xml(self, download_info, num_nfs):
-        download_path = await download_info.path()
-        original_path = Path(download_path)
+        try:
+            if not num_nfs:
+                raise ErroNegocio('Número da NFS-e não encontrado')
+            download_path = await download_info.path()
+            original_path = Path(download_path)
 
-        novo_path = original_path.parent / f"nfse_{num_nfs}.xml"
-        original_path.rename(novo_path)
-        logger.info(f"Arquivo NFSe (XML) salvo em: {novo_path}")
+            if not original_path.exists():
+                raise ErroTecnico(f"Arquivo não encontrado: {original_path}")
+
+            novo_path = original_path.parent / f"nfse_{num_nfs:0>4}.xml"
+            original_path.rename(novo_path)
+            logger.info(f"Arquivo NFSe (XML) salvo em: {novo_path}")
+        except ErroNegocio as e:
+            raise
+        except Exception as e:
+            logger.error(f"Erro inesperado ao salvar o arquivo XML: {e}")
+            raise ErroTecnico(e)
 
   
     async def processar_pdf(self, download_info):
@@ -319,12 +325,21 @@ class Webform:
             
             linha_num_nfs = 6
             pos_num_nfs = 0
-            num_nfs = textoBruto.splitlines()[linha_num_nfs].split()[pos_num_nfs]
+            linhas = textoBruto.splitlines()
+
+            try:
+                num_nfs = linhas[linha_num_nfs].split()[pos_num_nfs]
+            except (IndexError, ValueError):
+                raise ErroNegocio('Número da NFS-e não encontrado no PDF')
+
             logger.info(f"Número da NFS-e extraído do PDF: {num_nfs}")
             logger.info("Arquivo PDF temporário processado e deletado.")
             return num_nfs
+        except ErroNegocio as e:
+            raise
         except Exception as e:
-            logger.error(f"Erro ao processar o PDF: {e}")
+            logger.error(f"Erro inesperado ao processar o PDF: {e}")
+            raise ErroTecnico(e)
         finally:
             if download_info and hasattr(download_info, 'delete'):
                 await download_info.delete()
