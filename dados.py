@@ -2,20 +2,23 @@ import pandas as pd
 from pathlib import Path
 from openpyxl import load_workbook
 from difflib import get_close_matches
-from pyautogui import alert
+from logging_config import get_logger
+from exceptions import ErroNegocio, ErroTecnico
+from config import obter_dados_config
+
+
+logger = get_logger(__name__)
 
 
 class Dados:
     def __init__(self, arqPlanilha, sede):
         self.arqPlanilha = Path(arqPlanilha)
-
-        base_path_matriz = r"C:\Users\novoa\OneDrive\Área de Trabalho\base\CPF_matriz.xlsx"
-        base_path_filial = r"C:\Users\novoa\OneDrive\Área de Trabalho\base\CPF_filial.xlsx"
+        self.config = obter_dados_config()
 
         if sede == 'Matriz':
-            self.base_df = pd.read_excel(base_path_matriz, usecols=["ResponsávelFinanceiro", "CPF"])
+            self.base_df = pd.read_excel(self.config['base_matriz'], usecols=["ResponsávelFinanceiro", "CPF"])
         else:
-            self.base_df = pd.read_excel(base_path_filial, usecols=["ResponsávelFinanceiro", "CPF"])
+            self.base_df = pd.read_excel(self.config['base_filial'], usecols=["ResponsávelFinanceiro", "CPF"])
         
 
     def encontrar_melhor_match(self, nome):
@@ -45,7 +48,12 @@ class Dados:
     
     
     def formata_planilha(self, arqPlanilha):
-        wb = load_workbook(arqPlanilha)
+        try:
+            wb = load_workbook(arqPlanilha)
+        except Exception as e:
+            logger.error(f'Falha ao abrir a planilha {arqPlanilha}\n{e}')
+            raise ErroTecnico(f'Falha ao abrir a planilha {arqPlanilha}\n{e}')
+
 
         if not 'dados' in wb.sheetnames:
             self.dados_origem = pd.read_excel(arqPlanilha, 'dados_origem', header=1, skipfooter=1)
@@ -59,10 +67,9 @@ class Dados:
             clientes_novos = pd.DataFrame()
             if dados_faltantes.any():
                 clientes_novos = self.dados_origem.loc[dados_faltantes]
-                alert(title='Clientes não cadastrados encontrados',
-                        text='\n'.join(clientes_novos['ResponsávelFinanceiro'].to_list())
-                )
-                self.dados_destino.drop(clientes_novos.index, inplace=True)
+
+                logger.info('Clientes não cadastrados encontrados')
+                logger.info('\n' + '\n'.join(clientes_novos['ResponsávelFinanceiro'].to_list()))
 
             with pd.ExcelWriter(arqPlanilha, mode="a", engine="openpyxl", if_sheet_exists="replace") as writer:
                 self.dados_destino.to_excel(writer, sheet_name="dados", index=False, startrow=1)
@@ -71,7 +78,11 @@ class Dados:
 
 
     def obter_dados(self, a_fazer=True):
-        wb = load_workbook(self.arqPlanilha)
+        try:
+            wb = load_workbook(self.arqPlanilha)
+        except Exception as e:
+            logger.error(f'Falha ao abrir a planilha {self.arqPlanilha}\n{e}')
+            raise ErroTecnico(f'Falha ao abrir a planilha {self.arqPlanilha}\n{e}')
 
         if 'dados' in wb.sheetnames:
             self.dados = pd.read_excel(self.arqPlanilha, 'dados', header=1)#, skipfooter=1)
@@ -90,12 +101,24 @@ class Dados:
 
             return self.dados[self.dados['Notas'].isna()] if a_fazer else self.dados
         else:
-            return None
+            logger.error("A aba 'dados' não existe na planilha")
+            raise ErroNegocio(
+                "A aba 'dados' não existe na planilha"
+            )
     
 
     def registra_numero_notas(self, index_df, num_nota):
-        wb = load_workbook(self.arqPlanilha)
-        sheet = wb['dados']
+        if not isinstance(index_df, int):
+            raise ErroNegocio("index_df deve ser um inteiro")
+        if not isinstance(num_nota, int):
+            raise ErroNegocio("num_nota deve ser um inteiro")
+            
+        try:
+            wb = load_workbook(self.arqPlanilha)
+            sheet = wb['dados']
+        except Exception as e:
+            logger.error(f'Falha ao abrir a planilha {self.arqPlanilha}\n{e}')
+            raise ErroTecnico(f'Falha ao abrir a planilha {self.arqPlanilha}\n{e}')
 
         # Adicionar a coluna 'Status' se não existir
         if 'Notas' not in [celula.value for celula in sheet[2]]:
@@ -104,7 +127,11 @@ class Dados:
         notas_col_index = [celula.value for celula in sheet[2]].index('Notas') + 1
         sheet.cell(row=index_df+3, column=notas_col_index).value = num_nota
 
-        wb.save(self.arqPlanilha)
+        try:
+            wb.save(self.arqPlanilha)
+        except Exception as e:
+            logger.error(f'Falha ao salvar a planilha {self.arqPlanilha}\n{e}')
+            raise ErroTecnico(f'Falha ao salvar a planilha {self.arqPlanilha}\n{e}')
 
 
 

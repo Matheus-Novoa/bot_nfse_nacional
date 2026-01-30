@@ -31,9 +31,14 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
     mes = meses[str(data_obj.month)]
     ano = str(data_obj.year)
 
-    dados_obj = Dados(arqPlanilha, sede)
-    df_afazer = dados_obj.obter_dados().copy()
-    df_afazer['Notas'] = df_afazer['Notas'].astype(str)
+    try:
+        dados_obj = Dados(arqPlanilha, sede)
+        df_afazer = dados_obj.obter_dados().copy()
+        df_afazer['Notas'] = df_afazer['Notas'].astype(str)
+    except ErroNegocio as e:
+        logger.critical(f'Falha no carregamento dos dados: {e}')
+        await enviar_log_telegram(f'Falha no carregamento dos dados: {e}')
+        raise
 
     browser = Browser(pastaDownload)
     page = browser.setup_browser()
@@ -47,7 +52,7 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
         except ErroNegocio as e:
             logger.critical('Falha funcional na inicialização: {e}')
             await enviar_log_telegram(f'Falha funcional na inicialização: {e}')
-            return
+            raise
         except ErroTecnico as e:
             logger.critical('Falha técnica na inicialização: {e}')
             await enviar_log_telegram(f'Falha técnica na inicialização: {e}')
