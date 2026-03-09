@@ -9,6 +9,7 @@ from logging_config import get_logger
 import asyncio
 from exceptions import *
 from retry import ui_retry, bootstrap_retry
+from utils.valida_nomes import validar_nome
 
 
 logger = get_logger(__name__)
@@ -110,6 +111,15 @@ class Webform:
             btn_pesquisa_cpf = self.page.locator("#btn_Tomador_Inscricao_pesquisar")
             await btn_pesquisa_cpf.click()
 
+            campo_nome_portal = self.page.locator("#Tomador_Nome")
+            await expect(campo_nome_portal).not_to_have_value("")
+            nome_portal = await campo_nome_portal.input_value()
+
+            if not validar_nome(self.cliente.ResponsávelFinanceiro, nome_portal):
+                raise ErroNegocio(
+                    f'Nome no portal "{nome_portal}" não corresponde ao nome na planilha "{self.cliente.ResponsávelFinanceiro}"'
+                )
+
             await self.page.get_by_role("button", name="Avançar").click()
         except PlayTimeoutError as e:
             logger.error(f'Timeout na tela [PESSOAS]: {e}')
@@ -119,8 +129,9 @@ class Webform:
             logger.error(f'Erro de asserção na tela [PESSOAS]: {e}')
             logger.warning('Tentando regarregar a página [PESSOAS]...')
             raise SystemAssertionError(e)
-        except ErroNegocio:
-            raise ErroNegocio('Erro na tela [PESSOAS]')
+        except ErroNegocio as e:
+            logger.error(f'Erro na tela [PESSOAS]:\n{e}')
+            raise ErroNegocio(e)
         except Exception as e:
             logger.error('Erro inesperado ao preencher a página [PESSOAS]')
             logger.error(e)

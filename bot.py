@@ -79,7 +79,7 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
                 await webform.gerar_nova_nf()
 
             except ErroNegocio as e:
-                logger.error(f'[cliente={cliente.Index}] Erro funcional: {e}')
+                logger.error(f'[cliente={cliente.Index}] Erro funcional:\n{e}')
                 await enviar_log_telegram(
                     f'[cliente={cliente.Index}] Erro funcional: {e}'
                 )
