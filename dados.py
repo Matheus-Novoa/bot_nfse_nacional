@@ -109,8 +109,10 @@ class Dados:
 
     def registra_numero_notas(self, index_df, num_nota):
         if not isinstance(index_df, int):
+            logger.error("index_df deve ser um inteiro")
             raise ErroNegocio("index_df deve ser um inteiro")
         if not isinstance(num_nota, int):
+            logger.error("num_nota deve ser um inteiro")
             raise ErroNegocio("num_nota deve ser um inteiro")
             
         try:

@@ -184,6 +184,7 @@ class Webform:
     @ui_retry
     async def prencher_tela_valores(self):
         situacao_trib = self.config['situacao_trib']
+        tipo_retencao = self.config['tipo_retencao']
         aliq_pis = self.config['aliq_pis']
         aliq_cofins = self.config['aliq_cofins']
         trib_fed = self.config['trib_fed']
@@ -212,17 +213,21 @@ class Webform:
             await campo_situacao_trib.click()
             await campo_situacao_trib.get_by_text(situacao_trib).click()
 
-            check_n_retido = self.page.locator("label:has-text('Não Retido') span")
-            await check_n_retido.click()
-
             base_calc = self.page.locator('#TributacaoFederal_PISCofins_BaseDeCalculo')
             await base_calc.fill(str(self.cliente.ValorTotal))
-
+            
             campo_aliq_pis = self.page.locator('#TributacaoFederal_PISCofins_AliquotaPIS')
             await campo_aliq_pis.fill(aliq_pis)
             
             campo_aliq_cofins = self.page.locator('#TributacaoFederal_PISCofins_AliquotaCOFINS')
             await campo_aliq_cofins.fill(aliq_cofins)
+            
+            tipo_retencao_opcoes = self.page.locator("#TributacaoFederal_PISCofins_TipoRetencao_chosen")
+            await tipo_retencao_opcoes.locator("a").click()
+            tipo_retencao_selecionada = tipo_retencao_opcoes.locator("li.active-result", has_text=tipo_retencao)
+            await tipo_retencao_selecionada.wait_for(state="visible")
+            await tipo_retencao_selecionada.evaluate("el => el.scrollIntoView({block: 'center'})")
+            await tipo_retencao_selecionada.click()
 
             config_valores = self.page.locator("label:has-text('Configurar os valores percentuais correspondentes') span")
             await config_valores.click()
@@ -328,7 +333,7 @@ class Webform:
             linhas = textoBruto.splitlines()
 
             try:
-                num_nfs = linhas[linha_num_nfs].split()[pos_num_nfs]
+                num_nfs = int(linhas[linha_num_nfs].split()[pos_num_nfs])
             except (IndexError, ValueError):
                 raise ErroNegocio('Número da NFS-e não encontrado no PDF')
 
