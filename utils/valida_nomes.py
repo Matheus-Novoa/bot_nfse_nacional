@@ -29,3 +29,8 @@ def validar_nome(nome_planilha, nome_portal, limite=95):
     # Ele separa as palavras e verifica se as de uma string estão na outra.
     score = fuzz.token_set_ratio(n1, n2)
     return score >= limite
+
+
+if __name__ == "__main__":
+    # Testes simples
+    assert validar_nome("Carolina Majewski Iponema", "CAROLINA CHAVES CARVALHO MAJEWSKI") == True
