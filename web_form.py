@@ -91,6 +91,10 @@ class Webform:
     @ui_retry
     async def preencher_tela_pessoas(self, data):
         try:
+            if not self.cliente.ResponsávelFinanceiro or not self.cliente.CPF:
+                logger.error(f'Dados do cliente incompletos: nome ou CPF ausente (Cliente: {self.cliente})')
+                raise ErroNegocio('Dados do cliente incompletos: nome ou CPF ausente')
+            
             logger.info(self.cliente.ResponsávelFinanceiro)
             logger.info(self.cliente.CPF)
             campo_data = self.page.locator("input.form-control.data")
@@ -115,7 +119,7 @@ class Webform:
             await expect(campo_nome_portal).not_to_have_value("")
             nome_portal = await campo_nome_portal.input_value()
 
-            if not validar_nome(self.cliente.ResponsávelFinanceiro, nome_portal):
+            if not validar_nome(self.cliente.ResponsávelFinanceiro, nome_portal, limite=85):
                 raise ErroNegocio(
                     f'Nome no portal "{nome_portal}" não corresponde ao nome na planilha "{self.cliente.ResponsávelFinanceiro}"'
                 )

@@ -1,10 +1,10 @@
 import pandas as pd
 from pathlib import Path
 from openpyxl import load_workbook
-from difflib import get_close_matches
 from logging_config import get_logger
 from exceptions import ErroNegocio, ErroTecnico
 from config import obter_dados_config
+from utils.valida_nomes import normalizar_texto, validar_nome_lista
 
 
 logger = get_logger(__name__)
@@ -19,6 +19,17 @@ class Dados:
             self.base_df = pd.read_excel(self.config['base_matriz'], usecols=["ResponsávelFinanceiro", "CPF"])
         else:
             self.base_df = pd.read_excel(self.config['base_filial'], usecols=["ResponsávelFinanceiro", "CPF"])
+
+
+    def limpar_cpf(self, cpf):
+        """
+        Limpa o CPF: remove decimais, mantém apenas dígitos, trata NaNs e preenche com zeros até 11 dígitos.
+        Retorna None se for NaN ou inválido.
+        """
+        if pd.isna(cpf):
+            return ''
+        cpf_str = str(cpf).split('.')[0]  # Remove decimais (ex.: "123456789012.0" -> "123456789012")
+        return cpf_str.zfill(11)
         
 
     def encontrar_melhor_match(self, nome):
@@ -28,23 +39,22 @@ class Dados:
         - o CPF associado a esse nome.
         Caso nenhum nome seja encontrado, retorna (None, None).
         """
-        # Extrai a lista de nomes da coluna "ResponsávelFinanceiro".
-        lista_nomes = self.base_df["ResponsávelFinanceiro"].tolist()
+        base_normalizada = self.base_df.copy() 
+        base_normalizada['CPF'] = base_normalizada['CPF'].astype(str)
+        base_normalizada['CPF'] = base_normalizada['CPF'].str.zfill(11).astype(str)  # Garantir que o CPF tenha 11 dígitos
+        base_normalizada["ResponsávelFinanceiro"] = base_normalizada["ResponsávelFinanceiro"].apply(normalizar_texto)
+     
+        lista_nomes = base_normalizada["ResponsávelFinanceiro"].tolist()
+        correspondencia = validar_nome_lista(nome, lista_nomes)
         
-        # Usa get_close_matches para encontrar o nome mais próximo.
-        # n=1: retorna apenas a melhor correspondência.
-        # cutoff=0.0: nenhum corte de similaridade; ajuste se necessário.
-        correspondencias = get_close_matches(nome, lista_nomes, n=1, cutoff=0.85)
-        
-        if correspondencias:
-            melhor_nome = correspondencias[0]
-            # Recupera o CPF associado a esse nome.
-            cpf = self.base_df.loc[self.base_df.iloc[:, 0] == melhor_nome].iloc[0, 1]
+        if correspondencia:
+            melhor_nome = correspondencia[0]
+            cpf = base_normalizada.loc[base_normalizada.iloc[:, 0] == melhor_nome].iloc[0, 1]
         else:
-            melhor_nome = None
+            nome = None
             cpf = None
 
-        return melhor_nome, cpf
+        return nome, cpf
     
     
     def formata_planilha(self, arqPlanilha):
@@ -91,6 +101,8 @@ class Dados:
                 self.dados['Notas'] = None
             
             self.dados['Aluno'] = self.dados['Aluno'].apply(lambda i: i.split()[0])
+            # Garantir que o CPF seja tratado como string, sem casas decimais. Não imputar valores às células vazias
+            self.dados['CPF'] = self.dados['CPF'].apply(self.limpar_cpf)
 
             self.dados.loc[self.dados['Turma'].str.contains('Y1|Y2|Year'), 'Acumulador'] = '2'
             self.dados['Acumulador'] = self.dados['Acumulador'].fillna('1')
@@ -139,6 +151,8 @@ class Dados:
 
 if __name__ == '__main__':
     arquivo_planilha = r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_sul\escola_canadenseZS_nov25\Numeração de Boletos_Zona Sul_2025_NOVEMBRO.xlsx"
-    dados = Dados(arquivo_planilha, 'Zona Sul')
-    df = dados.obter_dados()#a_fazer=False)
-    print(df)
+    dados = Dados(arquivo_planilha, 'Matriz')
+    n = dados.encontrar_melhor_match("Lilian C Souza de Lima Abdon")
+    print(n)
+    # df = dados.obter_dados()#a_fazer=False)
+    # print(df)
