@@ -65,16 +65,16 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
                 await webform.prencher_tela_valores()
                 await webform.emitir_nota()
                 
-                download_info_pdf = await webform.baixar_arquivos('pdf')
-                if download_info_pdf:
-                    num_nfs = await webform.processar_pdf(download_info_pdf)
+                # download_info_pdf = await webform.baixar_arquivos('pdf')
+                # if download_info_pdf:
+                #     num_nfs = await webform.processar_pdf(download_info_pdf)
 
-                    df_afazer.at[cliente.Index, 'Notas'] = num_nfs
-                    dados_obj.registra_numero_notas(cliente.Index, num_nfs)
+                #     df_afazer.at[cliente.Index, 'Notas'] = num_nfs
+                #     dados_obj.registra_numero_notas(cliente.Index, num_nfs)
                 
-                download_info_xml = await webform.baixar_arquivos('xml')
-                if download_info_xml:
-                    await webform.salvar_xml(download_info_xml, num_nfs)
+                # download_info_xml = await webform.baixar_arquivos('xml')
+                # if download_info_xml:
+                #     await webform.salvar_xml(download_info_xml, num_nfs)
 
                 await webform.gerar_nova_nf()
 
