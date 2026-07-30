@@ -34,7 +34,7 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
     try:
         dados_obj = Dados(arqPlanilha, sede)
         df_afazer = dados_obj.obter_dados().copy()
-        df_afazer['Notas'] = df_afazer['Notas'].astype(str)
+        df_afazer['Chave'] = df_afazer['Chave'].astype(str)
     except ErroNegocio as e:
         logger.critical(f'Falha no carregamento dos dados: {e}')
         await enviar_log_telegram(f'Falha no carregamento dos dados: {e}')
@@ -70,11 +70,15 @@ async def main(dataGeracao, pastaDownload, arqPlanilha, sedes):
                 #     num_nfs = await webform.processar_pdf(download_info_pdf)
 
                 #     df_afazer.at[cliente.Index, 'Notas'] = num_nfs
-                #     dados_obj.registra_numero_notas(cliente.Index, num_nfs)
+                    # dados_obj.registra_numero_notas(cliente.Index, num_nfs)
                 
                 # download_info_xml = await webform.baixar_arquivos('xml')
                 # if download_info_xml:
                 #     await webform.salvar_xml(download_info_xml, num_nfs)
+
+                chave = await webform.obter_chave()
+                if chave:
+                    dados_obj.registra_chave(cliente.Index, int(chave))
 
                 await webform.gerar_nova_nf()
 

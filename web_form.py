@@ -287,6 +287,19 @@ class Webform:
             logger.error(f'Erro inesperado na tela [EMITIR NFSE]: {e}')
             raise ErroTecnico(e)
 
+
+    @ui_retry
+    async def obter_chave(self):
+        try:
+            seletor_texto_chave = self.page.locator("//dt[normalize-space()='Chave de Acesso:']")
+            expect(seletor_texto_chave).to_be_visible()
+            chave = await seletor_texto_chave.locator("xpath=following-sibling::dd[1]").text_content()
+            logger.info(f'Chave de Acesso encontrada: {chave}')
+            return chave.strip()
+        except Exception as e:
+            logger.error('Chave de Acesso não encontrada')
+            raise ErroTecnico(e)
+
     
     @ui_retry
     async def baixar_arquivos(self, formato):

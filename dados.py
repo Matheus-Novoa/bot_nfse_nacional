@@ -97,8 +97,8 @@ class Dados:
         if 'dados' in wb.sheetnames:
             self.dados = pd.read_excel(self.arqPlanilha, 'dados', header=1)#, skipfooter=1)
 
-            if 'Notas' not in self.dados.columns:
-                self.dados['Notas'] = None
+            if 'Chave' not in self.dados.columns:
+                self.dados['Chave'] = None
             
             self.dados['Aluno'] = self.dados['Aluno'].apply(lambda i: i.split()[0])
             # Garantir que o CPF seja tratado como string, sem casas decimais. Não imputar valores às células vazias
@@ -111,7 +111,7 @@ class Dados:
             self.dados['ValorTotal'] = self.dados['ValorTotal'].apply(lambda x: '{:0.2f}'.format(x).replace('.',','))
             self.dados['Alimentação'] = self.dados['Alimentação'].apply(lambda x: '{:0.2f}'.format(x).replace('.',','))
 
-            return self.dados[self.dados['Notas'].isna()] if a_fazer else self.dados
+            return self.dados[self.dados['Chave'].isna()] if a_fazer else self.dados
         else:
             logger.error("A aba 'dados' não existe na planilha")
             raise ErroNegocio(
@@ -119,13 +119,10 @@ class Dados:
             )
     
 
-    def registra_numero_notas(self, index_df, num_nota):
+    def registra_chave(self, index_df, num_chave):
         if not isinstance(index_df, int):
             logger.error("index_df deve ser um inteiro")
             raise ErroNegocio("index_df deve ser um inteiro")
-        if not isinstance(num_nota, int):
-            logger.error("num_nota deve ser um inteiro")
-            raise ErroNegocio("num_nota deve ser um inteiro")
             
         try:
             wb = load_workbook(self.arqPlanilha)
@@ -135,11 +132,14 @@ class Dados:
             raise ErroTecnico(f'Falha ao abrir a planilha {self.arqPlanilha}\n{e}')
 
         # Adicionar a coluna 'Status' se não existir
-        if 'Notas' not in [celula.value for celula in sheet[2]]:
-            sheet.cell(row=2, column=sheet.max_column + 1).value = 'Notas'
+        if 'Chave' not in [celula.value for celula in sheet[2]]:
+            sheet.cell(row=2, column=sheet.max_column + 1).value = 'Chave'
 
-        notas_col_index = [celula.value for celula in sheet[2]].index('Notas') + 1
-        sheet.cell(row=index_df+3, column=notas_col_index).value = num_nota
+        chave_col_index = [celula.value for celula in sheet[2]].index('Chave') + 1
+        # sheet.cell(row=index_df+3, column=notas_col_index).value = num_chave
+        celula = sheet.cell(row=index_df + 3, column=chave_col_index)
+        celula.number_format = '@'
+        celula.value = str(num_chave)
 
         try:
             wb.save(self.arqPlanilha)
