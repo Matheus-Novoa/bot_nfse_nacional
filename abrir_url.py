@@ -87,8 +87,8 @@ async def consultar_notas(planilha: str, url: str, xml_dir: Path) -> str:
 
 if __name__ == "__main__":
     url = 'https://sefin.nfse.gov.br/SefinNacional/nfse/'
-    planilha = r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_norte\escola_canadenseZS_jun26\Maple Bear Zona Norte Jun 26.xlsx"
-    xml_dir = r'C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\xml_notas_jun'
+    planilha = r"C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\planilhas\zona_norte\escola_canadenseZS_jul26\Maple Bear Zona Norte Jul 26.xlsx"
+    xml_dir = r'C:\Users\novoa\OneDrive\Área de Trabalho\notas_MB\xml_notas_jul'
     # print(asyncio.run(obter_notas_afazer(planilha)))
     asyncio.run(
         consultar_notas(
